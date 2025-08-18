@@ -12,13 +12,15 @@ import (
 type AuthHandlers struct {
 	authService *AuthService
 	jwtService  *JWTService
+	enableSSO   bool
 }
 
 // NewAuthHandlers creates new authentication handlers
-func NewAuthHandlers(authService *AuthService, jwtService *JWTService) *AuthHandlers {
+func NewAuthHandlers(authService *AuthService, jwtService *JWTService, enableSSO bool) *AuthHandlers {
 	return &AuthHandlers{
 		authService: authService,
 		jwtService:  jwtService,
+		enableSSO:   enableSSO,
 	}
 }
 
@@ -175,8 +177,18 @@ func (h *AuthHandlers) Login(c *gin.Context) {
 // @Param request body GoogleLoginRequest true "Google access token"
 // @Success 200 {object} AuthResponse
 // @Failure 401 {object} map[string]interface{}
+// @Failure 503 {object} map[string]interface{}
 // @Router /auth/google [post]
 func (h *AuthHandlers) GoogleLogin(c *gin.Context) {
+	// Check if SSO is enabled
+	if !h.enableSSO {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "SSO authentication is temporarily disabled",
+			"code":  "SSO_DISABLED",
+		})
+		return
+	}
+
 	var req GoogleLoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -413,5 +425,23 @@ func (h *AuthHandlers) ValidateToken(c *gin.Context) {
 		"session_id": userInfo.SessionID,
 		"auth_type":  userInfo.AuthType,
 		"name":       userInfo.Name,
+	})
+}
+
+// @Summary Get authentication status
+// @Description Get current authentication configuration and available methods
+// @Tags auth
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /auth/status [get]
+func (h *AuthHandlers) GetAuthStatus(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"methods": gin.H{
+			"password": true,
+			"google":   h.enableSSO,
+			"guest":    true,
+		},
+		"sso_enabled": h.enableSSO,
+		"version":     "1.0",
 	})
 }

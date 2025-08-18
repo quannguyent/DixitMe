@@ -635,6 +635,7 @@ Add authentication settings to your `.env` file:
 JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
 GOOGLE_CLIENT_ID=your-google-oauth-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
+ENABLE_SSO=true  # Set to false to temporarily disable SSO login
 ```
 
 ### Security Features

@@ -26,6 +26,7 @@ type AuthConfig struct {
 	JWTSecret          string
 	GoogleClientID     string
 	GoogleClientSecret string
+	EnableSSO          bool
 }
 
 func Load() *Config {
@@ -56,6 +57,7 @@ func Load() *Config {
 			JWTSecret:          getEnv("JWT_SECRET", "dev-secret-change-in-production"),
 			GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
 			GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
+			EnableSSO:          getBoolEnv("ENABLE_SSO", true),
 		},
 	}
 }

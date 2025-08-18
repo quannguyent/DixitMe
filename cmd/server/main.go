@@ -66,7 +66,7 @@ func main() {
 	// Initialize authentication services
 	jwtService := auth.NewJWTService(cfg.Auth.JWTSecret)
 	authService := auth.NewAuthService(jwtService)
-	authHandlers := auth.NewAuthHandlers(authService, jwtService)
+	authHandlers := auth.NewAuthHandlers(authService, jwtService, cfg.Auth.EnableSSO)
 
 	// Create Gin router (without default logger)
 	r := gin.New()
@@ -97,6 +97,7 @@ func main() {
 			authGroup.POST("/google", authHandlers.GoogleLogin)
 			authGroup.POST("/guest", authHandlers.GuestLogin)
 			authGroup.POST("/refresh", authHandlers.RefreshToken)
+			authGroup.GET("/status", authHandlers.GetAuthStatus)
 
 			// Protected auth routes
 			authGroup.POST("/logout", auth.RequireAuth(jwtService), authHandlers.Logout)
