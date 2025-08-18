@@ -1,34 +1,36 @@
 package database
 
 import (
-	"log"
-
+	"dixitme/internal/logger"
 	"dixitme/internal/models"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
+	gormLogger "gorm.io/gorm/logger"
 )
 
 var DB *gorm.DB
 
 func Initialize(databaseURL string) {
 	var err error
+	log := logger.GetLogger()
 
 	DB, err = gorm.Open(postgres.Open(databaseURL), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: gormLogger.Default.LogMode(gormLogger.Info),
 	})
 
 	if err != nil {
-		log.Fatal("Failed to connect to database:", err)
+		log.Error("Failed to connect to database", "error", err)
+		panic(err)
 	}
 
 	// Run migrations
 	if err := migrate(); err != nil {
-		log.Fatal("Failed to run migrations:", err)
+		log.Error("Failed to run migrations", "error", err)
+		panic(err)
 	}
 
-	log.Println("Database connection established and migrations completed")
+	log.Info("Database connection established and migrations completed")
 }
 
 func migrate() error {
@@ -39,7 +41,11 @@ func migrate() error {
 		&models.GameRound{},
 		&models.CardSubmission{},
 		&models.Vote{},
+		&models.Card{},
+		&models.Tag{},
+		&models.CardTag{},
 		&models.GameHistory{},
+		&models.ChatMessage{},
 	)
 }
 

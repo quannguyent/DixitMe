@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/rand"
+	"strings"
 	"sync"
 	"time"
 
+	"dixitme/internal/bot"
 	"dixitme/internal/database"
+	"dixitme/internal/logger"
 	"dixitme/internal/models"
 	"dixitme/internal/redis"
 
@@ -81,7 +83,7 @@ func (m *Manager) CreateGame(roomCode string, creatorID uuid.UUID, creatorName s
 
 	// Store in Redis for scaling
 	if err := m.storeGameInRedis(game); err != nil {
-		log.Printf("Failed to store game in Redis: %v", err)
+		logger.Error("Failed to store game in Redis", "error", err, "room_code", roomCode)
 	}
 
 	return game, nil
@@ -139,11 +141,111 @@ func (m *Manager) JoinGame(roomCode string, playerID uuid.UUID, playerName strin
 
 	// Update Redis
 	if err := m.storeGameInRedis(game); err != nil {
-		log.Printf("Failed to update game in Redis: %v", err)
+		logger.Error("Failed to update game in Redis", "error", err, "room_code", roomCode)
 	}
 
 	// Broadcast player joined
 	m.BroadcastToGame(game, MessageTypePlayerJoined, PlayerJoinedPayload{Player: player})
+
+	// Send system message
+	m.SendSystemMessage(roomCode, fmt.Sprintf("%s joined the game", playerName))
+
+	return game, nil
+}
+
+// AddBot adds a bot player to an existing game
+func (m *Manager) AddBot(roomCode string, botLevel string) (*GameState, error) {
+	m.mu.RLock()
+	game, exists := m.games[roomCode]
+	m.mu.RUnlock()
+
+	if !exists {
+		return nil, fmt.Errorf("game not found")
+	}
+
+	game.Lock()
+	defer game.Unlock()
+
+	if game.Status != models.GameStatusWaiting {
+		return nil, fmt.Errorf("cannot add bot to game in progress")
+	}
+
+	if len(game.Players) >= 6 {
+		return nil, fmt.Errorf("game is full")
+	}
+
+	// Create bot player
+	botNames := bot.GetBotNames()
+	botName := botNames[rand.Intn(len(botNames))]
+
+	// Ensure unique bot name
+	for {
+		nameExists := false
+		for _, player := range game.Players {
+			if player.Name == botName {
+				nameExists = true
+				break
+			}
+		}
+		if !nameExists {
+			break
+		}
+		botName = botNames[rand.Intn(len(botNames))]
+	}
+
+	botID := uuid.New()
+
+	// Create bot in bot manager
+	botManager := bot.GetBotManager()
+	botPlayer := botManager.CreateBot(botName, bot.BotDifficulty(botLevel))
+	botPlayer.SetGameID(game.ID)
+
+	// Create game player
+	player := &Player{
+		ID:          botID,
+		Name:        botName,
+		Score:       0,
+		Position:    len(game.Players),
+		Hand:        make([]int, 0),
+		Connection:  nil,
+		IsConnected: true, // Bots are always "connected"
+		IsActive:    true,
+		IsBot:       true,
+		BotLevel:    botLevel,
+	}
+
+	game.Players[botID] = player
+
+	// Persist bot player to database
+	dbPlayer := &models.Player{
+		ID:       botID,
+		Name:     botName,
+		Type:     models.PlayerTypeBot,
+		BotLevel: botLevel,
+	}
+
+	if err := database.GetDB().Create(dbPlayer).Error; err != nil {
+		delete(game.Players, botID)
+		return nil, fmt.Errorf("failed to persist bot player: %w", err)
+	}
+
+	if err := m.persistGamePlayer(game.ID, player); err != nil {
+		delete(game.Players, botID)
+		return nil, fmt.Errorf("failed to persist bot game player: %w", err)
+	}
+
+	// Update Redis
+	if err := m.storeGameInRedis(game); err != nil {
+		logger.Error("Failed to update game in Redis", "error", err, "room_code", roomCode)
+	}
+
+	// Broadcast bot joined
+	m.BroadcastToGame(game, MessageTypePlayerJoined, PlayerJoinedPayload{Player: player})
+
+	// Send system message
+	m.SendSystemMessage(roomCode, fmt.Sprintf("Bot %s (%s difficulty) joined the game", botName, botLevel))
+
+	logger.Info("Bot added to game", "bot_id", botID, "bot_name", botName, "bot_level", botLevel, "room_code", roomCode)
 
 	return game, nil
 }
@@ -194,6 +296,9 @@ func (m *Manager) StartGame(roomCode string, playerID uuid.UUID) error {
 
 	// Broadcast game started
 	m.BroadcastToGame(game, MessageTypeGameStarted, GameStartedPayload{GameState: game})
+
+	// Send system message
+	m.SendSystemMessage(roomCode, "Game started! Let the storytelling begin!")
 
 	return nil
 }
@@ -604,7 +709,7 @@ func (m *Manager) completeGame(game *GameState) {
 
 	// Persist game completion
 	if err := m.persistGameCompletion(game.ID, winnerID); err != nil {
-		log.Printf("Failed to persist game completion: %v", err)
+		logger.Error("Failed to persist game completion", "error", err, "game_id", game.ID, "winner_id", winnerID)
 	}
 
 	// Broadcast game completed
@@ -630,14 +735,14 @@ func (m *Manager) BroadcastToGame(game *GameState, messageType MessageType, payl
 
 	messageBytes, err := json.Marshal(message)
 	if err != nil {
-		log.Printf("Failed to marshal message: %v", err)
+		logger.Error("Failed to marshal message", "error", err, "message_type", messageType)
 		return
 	}
 
 	for _, player := range game.Players {
 		if player.Connection != nil && player.IsConnected {
 			if err := player.Connection.WriteMessage(websocket.TextMessage, messageBytes); err != nil {
-				log.Printf("Failed to send message to player %s: %v", player.ID, err)
+				logger.Error("Failed to send message to player", "error", err, "player_id", player.ID, "message_type", messageType)
 				player.IsConnected = false
 			}
 		}
@@ -754,4 +859,347 @@ func (m *Manager) storeGameInRedis(game *GameState) error {
 	}
 
 	return client.Set(ctx, "game:"+game.RoomCode, gameJSON, time.Hour).Err()
+}
+
+// Bot automation methods
+
+// ProcessBotActions handles automated bot actions for the current game phase
+func (m *Manager) ProcessBotActions(game *GameState) {
+	if game.CurrentRound == nil {
+		return
+	}
+
+	switch game.CurrentRound.Status {
+	case models.RoundStatusStorytelling:
+		m.processBotStorytelling(game)
+	case models.RoundStatusSubmitting:
+		m.processBotSubmissions(game)
+	case models.RoundStatusVoting:
+		m.processBotVoting(game)
+	}
+}
+
+// processBotStorytelling handles bot storytelling
+func (m *Manager) processBotStorytelling(game *GameState) {
+	storytellerID := game.CurrentRound.StorytellerID
+	storyteller, exists := game.Players[storytellerID]
+
+	if !exists || !storyteller.IsBot {
+		return
+	}
+
+	// Bot storyteller submits clue and card
+	go func() {
+		// Add small delay for realism
+		time.Sleep(time.Duration(2+rand.Intn(3)) * time.Second)
+
+		botManager := bot.GetBotManager()
+		botPlayer := botManager.GetBot(storytellerID)
+		if botPlayer == nil {
+			logger.Error("Bot player not found", "bot_id", storytellerID)
+			return
+		}
+
+		// Update bot's hand
+		botPlayer.UpdateHand(storyteller.Hand)
+
+		// Bot selects card and generates clue
+		selectedCard, clue, err := botPlayer.SelectCardAsStoryteller()
+		if err != nil {
+			logger.Error("Bot failed to select storyteller card", "error", err, "bot_id", storytellerID)
+			return
+		}
+
+		// Submit clue and card
+		err = m.SubmitClue(game.RoomCode, storytellerID, clue, selectedCard)
+		if err != nil {
+			logger.Error("Bot failed to submit clue", "error", err, "bot_id", storytellerID)
+		}
+	}()
+}
+
+// processBotSubmissions handles bot card submissions
+func (m *Manager) processBotSubmissions(game *GameState) {
+	for playerID, player := range game.Players {
+		// Skip non-bots, storyteller, and players who already submitted
+		if !player.IsBot || playerID == game.CurrentRound.StorytellerID {
+			continue
+		}
+		if _, hasSubmitted := game.CurrentRound.Submissions[playerID]; hasSubmitted {
+			continue
+		}
+
+		go func(botID uuid.UUID, botPlayer *Player) {
+			// Add random delay for realism
+			time.Sleep(time.Duration(3+rand.Intn(5)) * time.Second)
+
+			botManager := bot.GetBotManager()
+			bot := botManager.GetBot(botID)
+			if bot == nil {
+				logger.Error("Bot player not found", "bot_id", botID)
+				return
+			}
+
+			// Update bot's hand
+			bot.UpdateHand(botPlayer.Hand)
+
+			// Bot selects card for clue
+			selectedCard, err := bot.SelectCardForClue(game.CurrentRound.Clue)
+			if err != nil {
+				logger.Error("Bot failed to select card for clue", "error", err, "bot_id", botID)
+				return
+			}
+
+			// Submit card
+			err = m.SubmitCard(game.RoomCode, botID, selectedCard)
+			if err != nil {
+				logger.Error("Bot failed to submit card", "error", err, "bot_id", botID)
+			}
+		}(playerID, player)
+	}
+}
+
+// processBotVoting handles bot voting
+func (m *Manager) processBotVoting(game *GameState) {
+	for playerID, player := range game.Players {
+		// Skip non-bots, storyteller, and players who already voted
+		if !player.IsBot || playerID == game.CurrentRound.StorytellerID {
+			continue
+		}
+		if _, hasVoted := game.CurrentRound.Votes[playerID]; hasVoted {
+			continue
+		}
+
+		go func(botID uuid.UUID, botPlayer *Player) {
+			// Add random delay for realism
+			time.Sleep(time.Duration(2+rand.Intn(4)) * time.Second)
+
+			botManager := bot.GetBotManager()
+			bot := botManager.GetBot(botID)
+			if bot == nil {
+				logger.Error("Bot player not found", "bot_id", botID)
+				return
+			}
+
+			// Get submitted cards for voting
+			submittedCards := make([]int, 0, len(game.CurrentRound.RevealedCards))
+			for _, revealedCard := range game.CurrentRound.RevealedCards {
+				submittedCards = append(submittedCards, revealedCard.CardID)
+			}
+
+			// Bot votes for card
+			selectedCard, err := bot.VoteForCard(submittedCards, game.CurrentRound.Clue, game.CurrentRound.StorytellerCard)
+			if err != nil {
+				logger.Error("Bot failed to vote for card", "error", err, "bot_id", botID)
+				return
+			}
+
+			// Submit vote
+			err = m.SubmitVote(game.RoomCode, botID, selectedCard)
+			if err != nil {
+				logger.Error("Bot failed to submit vote", "error", err, "bot_id", botID)
+			}
+		}(playerID, player)
+	}
+}
+
+// Chat functionality
+
+// SendChatMessage handles sending chat messages in a game
+func (m *Manager) SendChatMessage(roomCode string, playerID uuid.UUID, message string, messageType string) error {
+	game := m.getGame(roomCode)
+	if game == nil {
+		return fmt.Errorf("game not found")
+	}
+
+	player, exists := game.Players[playerID]
+	if !exists {
+		return fmt.Errorf("player not in game")
+	}
+
+	// Validate message type
+	if messageType == "" {
+		messageType = "chat"
+	}
+	if messageType != "chat" && messageType != "emote" {
+		return fmt.Errorf("invalid message type")
+	}
+
+	// Validate message content
+	if len(strings.TrimSpace(message)) == 0 {
+		return fmt.Errorf("message cannot be empty")
+	}
+	if len(message) > 500 { // Max message length
+		return fmt.Errorf("message too long")
+	}
+
+	// Determine current phase
+	currentPhase := "lobby"
+	if game.Status == models.GameStatusInProgress && game.CurrentRound != nil {
+		currentPhase = string(game.CurrentRound.Status)
+	}
+
+	// Only allow chat in lobby and voting phases
+	if currentPhase != "lobby" && currentPhase != "voting" {
+		return fmt.Errorf("chat not allowed in current phase")
+	}
+
+	// Create chat message
+	chatMessage := models.ChatMessage{
+		ID:          uuid.New(),
+		GameID:      game.ID,
+		PlayerID:    playerID,
+		Message:     strings.TrimSpace(message),
+		MessageType: messageType,
+		Phase:       currentPhase,
+		IsVisible:   true,
+		CreatedAt:   time.Now(),
+	}
+
+	// Persist to database
+	if err := m.persistChatMessage(&chatMessage); err != nil {
+		return fmt.Errorf("failed to persist chat message: %w", err)
+	}
+
+	// Create payload
+	payload := ChatMessagePayload{
+		ID:          chatMessage.ID,
+		PlayerID:    playerID,
+		PlayerName:  player.Name,
+		Message:     chatMessage.Message,
+		MessageType: chatMessage.MessageType,
+		Phase:       chatMessage.Phase,
+		Timestamp:   chatMessage.CreatedAt,
+	}
+
+	// Broadcast to all players in the game
+	m.BroadcastToGame(game, MessageTypeChatMessage, payload)
+
+	return nil
+}
+
+// GetChatHistory retrieves chat messages for a game and phase
+func (m *Manager) GetChatHistory(roomCode string, phase string, limit int) ([]ChatMessagePayload, error) {
+	game := m.getGame(roomCode)
+	if game == nil {
+		return nil, fmt.Errorf("game not found")
+	}
+
+	if limit <= 0 || limit > 100 {
+		limit = 50 // Default limit
+	}
+
+	// Get messages from database
+	messages, err := m.getChatMessages(game.ID, phase, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get chat messages: %w", err)
+	}
+
+	// Convert to payload format
+	payloads := make([]ChatMessagePayload, 0, len(messages))
+	for _, msg := range messages {
+		// Get player name
+		playerName := "Unknown"
+		if player, exists := game.Players[msg.PlayerID]; exists {
+			playerName = player.Name
+		} else {
+			// Fallback: get from database
+			var dbPlayer models.Player
+			if err := database.GetDB().First(&dbPlayer, "id = ?", msg.PlayerID).Error; err == nil {
+				playerName = dbPlayer.Name
+			}
+		}
+
+		payloads = append(payloads, ChatMessagePayload{
+			ID:          msg.ID,
+			PlayerID:    msg.PlayerID,
+			PlayerName:  playerName,
+			Message:     msg.Message,
+			MessageType: msg.MessageType,
+			Phase:       msg.Phase,
+			Timestamp:   msg.CreatedAt,
+		})
+	}
+
+	return payloads, nil
+}
+
+// SendSystemMessage sends a system message (e.g., "Player joined", "Round started")
+func (m *Manager) SendSystemMessage(roomCode string, message string) error {
+	game := m.getGame(roomCode)
+	if game == nil {
+		return fmt.Errorf("game not found")
+	}
+
+	// Determine current phase
+	currentPhase := "lobby"
+	if game.Status == models.GameStatusInProgress && game.CurrentRound != nil {
+		currentPhase = string(game.CurrentRound.Status)
+	}
+
+	// Create system message with a system player ID (using nil UUID)
+	systemPlayerID := uuid.Nil
+	chatMessage := models.ChatMessage{
+		ID:          uuid.New(),
+		GameID:      game.ID,
+		PlayerID:    systemPlayerID,
+		Message:     message,
+		MessageType: "system",
+		Phase:       currentPhase,
+		IsVisible:   true,
+		CreatedAt:   time.Now(),
+	}
+
+	// Persist to database
+	if err := m.persistChatMessage(&chatMessage); err != nil {
+		logger.Error("Failed to persist system message", "error", err)
+		// Continue anyway - system messages are not critical
+	}
+
+	// Create payload
+	payload := ChatMessagePayload{
+		ID:          chatMessage.ID,
+		PlayerID:    systemPlayerID,
+		PlayerName:  "System",
+		Message:     chatMessage.Message,
+		MessageType: chatMessage.MessageType,
+		Phase:       chatMessage.Phase,
+		Timestamp:   chatMessage.CreatedAt,
+	}
+
+	// Broadcast to all players in the game
+	m.BroadcastToGame(game, MessageTypeChatMessage, payload)
+
+	return nil
+}
+
+// Database persistence methods
+
+func (m *Manager) persistChatMessage(chatMessage *models.ChatMessage) error {
+	db := database.GetDB()
+	return db.Create(chatMessage).Error
+}
+
+func (m *Manager) getChatMessages(gameID uuid.UUID, phase string, limit int) ([]models.ChatMessage, error) {
+	db := database.GetDB()
+	var messages []models.ChatMessage
+
+	query := db.Where("game_id = ? AND is_visible = ?", gameID, true)
+
+	if phase != "" && phase != "all" {
+		query = query.Where("phase = ?", phase)
+	}
+
+	err := query.Order("created_at DESC").Limit(limit).Find(&messages).Error
+	if err != nil {
+		return nil, err
+	}
+
+	// Reverse to get chronological order
+	for i := 0; i < len(messages)/2; i++ {
+		j := len(messages) - 1 - i
+		messages[i], messages[j] = messages[j], messages[i]
+	}
+
+	return messages, nil
 }

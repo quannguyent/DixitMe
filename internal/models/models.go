@@ -7,10 +7,20 @@ import (
 	"gorm.io/gorm"
 )
 
+// PlayerType represents the type of player
+type PlayerType string
+
+const (
+	PlayerTypeHuman PlayerType = "human"
+	PlayerTypeBot   PlayerType = "bot"
+)
+
 // Player represents a player in the system
 type Player struct {
 	ID        uuid.UUID      `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
 	Name      string         `json:"name" gorm:"not null"`
+	Type      PlayerType     `json:"type" gorm:"default:'human'"`
+	BotLevel  string         `json:"bot_level,omitempty"` // easy, medium, hard
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
@@ -110,6 +120,49 @@ type Vote struct {
 	Player Player    `json:"player" gorm:"foreignKey:PlayerID"`
 }
 
+// Card represents a game card with tags for categorization and bot AI
+type Card struct {
+	ID          int       `json:"id" gorm:"primary_key"`
+	ImageURL    string    `json:"image_url" gorm:"not null"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	Extension   string    `json:"extension" gorm:"default:'.jpg'"`
+	IsActive    bool      `json:"is_active" gorm:"default:true"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+
+	// Relationships
+	Tags []CardTag `json:"tags" gorm:"many2many:card_tag_relations;"`
+}
+
+// Tag represents a categorization tag that can be applied to cards
+type Tag struct {
+	ID          int       `json:"id" gorm:"primary_key"`
+	Name        string    `json:"name" gorm:"unique;not null;index"`
+	Slug        string    `json:"slug" gorm:"unique;not null;index"`
+	Description string    `json:"description"`
+	Color       string    `json:"color" gorm:"default:'#3B82F6'"` // Hex color for UI
+	Weight      float64   `json:"weight" gorm:"default:1.0"`      // For weighted random selection
+	Category    string    `json:"category"`                       // Group tags by category
+	IsActive    bool      `json:"is_active" gorm:"default:true"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+
+	// Relationships
+	Cards []Card `json:"cards" gorm:"many2many:card_tag_relations;"`
+}
+
+// CardTag represents the many-to-many relationship between cards and tags
+type CardTag struct {
+	CardID int     `json:"card_id" gorm:"primaryKey"`
+	TagID  int     `json:"tag_id" gorm:"primaryKey"`
+	Weight float64 `json:"weight" gorm:"default:1.0"` // How strongly this tag applies to this card
+
+	// Relationships
+	Card Card `json:"card" gorm:"foreignKey:CardID"`
+	Tag  Tag  `json:"tag" gorm:"foreignKey:TagID"`
+}
+
 // GameHistory stores completed games for statistics
 type GameHistory struct {
 	ID          uuid.UUID `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
@@ -122,4 +175,20 @@ type GameHistory struct {
 	// Relationships
 	Game   Game   `json:"game" gorm:"foreignKey:GameID"`
 	Winner Player `json:"winner" gorm:"foreignKey:WinnerID"`
+}
+
+// ChatMessage represents a chat message in a game
+type ChatMessage struct {
+	ID          uuid.UUID `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	GameID      uuid.UUID `json:"game_id" gorm:"type:uuid;not null;index"`
+	PlayerID    uuid.UUID `json:"player_id" gorm:"type:uuid;not null;index"`
+	Message     string    `json:"message" gorm:"type:text;not null"`
+	MessageType string    `json:"message_type" gorm:"type:varchar(20);default:'chat'"` // chat, system, emote
+	Phase       string    `json:"phase" gorm:"type:varchar(20);not null"`              // lobby, storytelling, submitting, voting, scoring
+	IsVisible   bool      `json:"is_visible" gorm:"default:true"`                      // For moderation
+	CreatedAt   time.Time `json:"created_at" gorm:"autoCreateTime"`
+
+	// Relationships
+	Game   Game   `json:"game,omitempty" gorm:"foreignKey:GameID"`
+	Player Player `json:"player,omitempty" gorm:"foreignKey:PlayerID"`
 }

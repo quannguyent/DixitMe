@@ -2,10 +2,11 @@ package websocket
 
 import (
 	"encoding/json"
-	"log"
+	"fmt"
 	"net/http"
 
 	"dixitme/internal/game"
+	"dixitme/internal/logger"
 	"dixitme/internal/models"
 
 	"github.com/gin-gonic/gin"
@@ -29,13 +30,15 @@ type ConnectionMessage struct {
 
 // Message types from client
 const (
-	ClientMessageJoinGame   = "join_game"
-	ClientMessageCreateGame = "create_game"
-	ClientMessageStartGame  = "start_game"
-	ClientMessageSubmitClue = "submit_clue"
-	ClientMessageSubmitCard = "submit_card"
-	ClientMessageSubmitVote = "submit_vote"
-	ClientMessageLeaveGame  = "leave_game"
+	ClientMessageJoinGame       = "join_game"
+	ClientMessageCreateGame     = "create_game"
+	ClientMessageStartGame      = "start_game"
+	ClientMessageSubmitClue     = "submit_clue"
+	ClientMessageSubmitCard     = "submit_card"
+	ClientMessageSubmitVote     = "submit_vote"
+	ClientMessageLeaveGame      = "leave_game"
+	ClientMessageSendChat       = "send_chat"
+	ClientMessageGetChatHistory = "get_chat_history"
 )
 
 // Payload structures for client messages
@@ -73,6 +76,18 @@ type LeaveGamePayload struct {
 	RoomCode string `json:"room_code"`
 }
 
+type SendChatPayload struct {
+	RoomCode    string `json:"room_code"`
+	Message     string `json:"message"`
+	MessageType string `json:"message_type,omitempty"` // chat, emote
+}
+
+type GetChatHistoryPayload struct {
+	RoomCode string `json:"room_code"`
+	Phase    string `json:"phase,omitempty"` // lobby, voting, all
+	Limit    int    `json:"limit,omitempty"` // default 50
+}
+
 // HandleWebSocket handles WebSocket connections
 func HandleWebSocket(c *gin.Context) {
 	// Get player ID from query params or create new one
@@ -93,12 +108,12 @@ func HandleWebSocket(c *gin.Context) {
 	// Upgrade HTTP connection to WebSocket
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Printf("Failed to upgrade to WebSocket: %v", err)
+		logger.Error("Failed to upgrade to WebSocket", "error", err)
 		return
 	}
 	defer conn.Close()
 
-	log.Printf("WebSocket connection established for player %s", playerID)
+	logger.Info("WebSocket connection established", "player_id", playerID)
 
 	// Send initial connection confirmation
 	welcomeMsg := game.GameMessage{
@@ -108,7 +123,7 @@ func HandleWebSocket(c *gin.Context) {
 		},
 	}
 	if err := conn.WriteJSON(welcomeMsg); err != nil {
-		log.Printf("Failed to send welcome message: %v", err)
+		logger.Error("Failed to send welcome message", "error", err, "player_id", playerID)
 		return
 	}
 
@@ -117,13 +132,13 @@ func HandleWebSocket(c *gin.Context) {
 		var msg ConnectionMessage
 		if err := conn.ReadJSON(&msg); err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				log.Printf("WebSocket error: %v", err)
+				logger.Error("WebSocket unexpected close", "error", err, "player_id", playerID)
 			}
 			break
 		}
 
 		if err := handleMessage(conn, playerID, msg); err != nil {
-			log.Printf("Error handling message: %v", err)
+			logger.Error("Error handling WebSocket message", "error", err, "player_id", playerID, "message_type", msg.Type)
 			sendError(conn, err.Error())
 		}
 	}
@@ -220,6 +235,39 @@ func handleMessage(conn *websocket.Conn, playerID uuid.UUID, msg ConnectionMessa
 
 		return handleLeaveGame(playerID, payload.RoomCode)
 
+	case ClientMessageSendChat:
+		var payload SendChatPayload
+		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+			return err
+		}
+
+		return manager.SendChatMessage(payload.RoomCode, playerID, payload.Message, payload.MessageType)
+
+	case ClientMessageGetChatHistory:
+		var payload GetChatHistoryPayload
+		if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+			return err
+		}
+
+		limit := payload.Limit
+		if limit <= 0 {
+			limit = 50
+		}
+
+		messages, err := manager.GetChatHistory(payload.RoomCode, payload.Phase, limit)
+		if err != nil {
+			return err
+		}
+
+		// Send chat history back to requesting client
+		return conn.WriteJSON(game.GameMessage{
+			Type: game.MessageTypeChatHistory,
+			Payload: game.ChatHistoryPayload{
+				Messages: messages,
+				Phase:    payload.Phase,
+			},
+		})
+
 	default:
 		return sendError(conn, "Unknown message type: "+msg.Type)
 	}
@@ -247,6 +295,9 @@ func handleLeaveGame(playerID uuid.UUID, roomCode string) error {
 			PlayerID: playerID,
 		})
 
+		// Send system message
+		manager.SendSystemMessage(roomCode, fmt.Sprintf("%s left the game", player.Name))
+
 		// If game hasn't started, remove player completely
 		if gameState.Status == models.GameStatusWaiting {
 			delete(gameState.Players, playerID)
@@ -259,7 +310,7 @@ func handleLeaveGame(playerID uuid.UUID, roomCode string) error {
 func handleDisconnect(playerID uuid.UUID) {
 	// Mark player as disconnected in all their games
 	// This is a simplified implementation - in a real system you'd track which games a player is in
-	log.Printf("Player %s disconnected", playerID)
+	logger.Info("Player disconnected", "player_id", playerID)
 }
 
 func sendError(conn *websocket.Conn, message string) error {

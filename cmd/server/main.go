@@ -12,13 +12,15 @@
 package main
 
 import (
-	"log"
-
 	_ "dixitme/docs" // Import docs for swagger
+	"dixitme/internal/bot"
 	"dixitme/internal/config"
 	"dixitme/internal/database"
 	"dixitme/internal/handlers"
+	"dixitme/internal/logger"
 	"dixitme/internal/redis"
+	"dixitme/internal/seeder"
+	"dixitme/internal/storage"
 	websocketHandler "dixitme/internal/websocket"
 
 	"github.com/gin-gonic/gin"
@@ -30,6 +32,12 @@ func main() {
 	// Load configuration
 	cfg := config.Load()
 
+	// Initialize logger
+	logger.InitLogger(cfg.Logger)
+	log := logger.GetLogger()
+
+	log.Info("Starting DixitMe server", "version", "1.0")
+
 	// Set Gin mode
 	gin.SetMode(cfg.GinMode)
 
@@ -39,8 +47,29 @@ func main() {
 	// Initialize Redis
 	redis.Initialize(cfg.RedisURL)
 
-	// Create Gin router
-	r := gin.Default()
+	// Initialize MinIO storage
+	if err := storage.Initialize(cfg.MinIO); err != nil {
+		log.Error("Failed to initialize MinIO", "error", err)
+		// Continue without MinIO - fallback to local storage
+	}
+
+	// Initialize bot system
+	bot.Initialize()
+
+	// Seed database with default data
+	if err := seeder.SeedDatabase(); err != nil {
+		log.Error("Failed to seed database", "error", err)
+		// Continue without seeding - not critical for startup
+	}
+
+	// Create Gin router (without default logger)
+	r := gin.New()
+
+	// Add recovery middleware
+	r.Use(gin.Recovery())
+
+	// Add our custom logger middleware
+	r.Use(logger.GinLogger())
 
 	// Add CORS middleware
 	r.Use(handlers.CORSMiddleware())
@@ -64,8 +93,33 @@ func main() {
 		api.GET("/games", handlers.GetGames)
 		api.GET("/games/:room_code", handlers.GetGame)
 
-		// Card routes
-		api.GET("/cards", handlers.GetCards)
+		// Card management routes
+		api.POST("/cards", handlers.CreateCard)
+		api.GET("/cards", handlers.ListCards)
+		api.GET("/cards/:card_id", handlers.GetCardWithTags)
+		api.POST("/cards/:card_id/image", handlers.UploadCardImage)
+
+		// Legacy card route for compatibility
+		api.GET("/cards/legacy", handlers.GetCards)
+
+		// Tag management routes
+		api.POST("/tags", handlers.CreateTag)
+		api.GET("/tags", handlers.ListTags)
+
+		// Bot management routes
+		api.POST("/games/add-bot", handlers.AddBotToGame)
+		api.GET("/bots/stats", handlers.GetBotStats)
+
+		// Admin routes for database management
+		api.POST("/admin/seed", handlers.SeedDatabase)
+		api.POST("/admin/seed/tags", handlers.SeedTags)
+		api.POST("/admin/seed/cards", handlers.SeedCards)
+		api.GET("/admin/stats", handlers.GetDatabaseStats)
+
+		// Chat routes
+		api.POST("/chat/send", handlers.SendChatMessage)
+		api.GET("/chat/history", handlers.GetChatHistory)
+		api.GET("/chat/stats", handlers.GetChatStats)
 	}
 
 	// WebSocket endpoint
@@ -76,8 +130,8 @@ func main() {
 	r.Static("/static", "./web/build/static")
 	r.StaticFile("/", "./web/build/index.html")
 
-	log.Printf("Server starting on port %s", cfg.Port)
+	log.Info("Server starting", "port", cfg.Port, "gin_mode", cfg.GinMode)
 	if err := r.Run(":" + cfg.Port); err != nil {
-		log.Fatal("Failed to start server:", err)
+		log.Error("Failed to start server", "error", err)
 	}
 }

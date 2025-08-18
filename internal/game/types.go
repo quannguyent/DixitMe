@@ -43,6 +43,8 @@ type Player struct {
 	Connection  *websocket.Conn `json:"-"`    // WebSocket connection
 	IsConnected bool            `json:"is_connected"`
 	IsActive    bool            `json:"is_active"`
+	IsBot       bool            `json:"is_bot"`
+	BotLevel    string          `json:"bot_level,omitempty"` // easy, medium, hard
 }
 
 // Round represents the current round state
@@ -100,6 +102,8 @@ const (
 	MessageTypeGameCompleted  MessageType = "game_completed"
 	MessageTypeError          MessageType = "error"
 	MessageTypeGameState      MessageType = "game_state"
+	MessageTypeChatMessage    MessageType = "chat_message"
+	MessageTypeChatHistory    MessageType = "chat_history"
 )
 
 // WebSocket message payloads
@@ -151,4 +155,27 @@ type ErrorPayload struct {
 
 type GameStatePayload struct {
 	GameState *GameState `json:"game_state"`
+}
+
+// Chat message structures
+type ChatMessagePayload struct {
+	ID          uuid.UUID `json:"id"`
+	PlayerID    uuid.UUID `json:"player_id"`
+	PlayerName  string    `json:"player_name"`
+	Message     string    `json:"message"`
+	MessageType string    `json:"message_type"` // chat, system, emote
+	Phase       string    `json:"phase"`
+	Timestamp   time.Time `json:"timestamp"`
+}
+
+type ChatHistoryPayload struct {
+	Messages []ChatMessagePayload `json:"messages"`
+	Phase    string               `json:"phase"`
+}
+
+// Incoming message for sending chat
+type SendChatMessage struct {
+	RoomCode string `json:"room_code"`
+	Message  string `json:"message"`
+	Type     string `json:"type,omitempty"` // Optional: chat, emote
 }

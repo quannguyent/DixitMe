@@ -2,7 +2,8 @@ package redis
 
 import (
 	"context"
-	"log"
+
+	"dixitme/internal/logger"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -10,9 +11,12 @@ import (
 var Client *redis.Client
 
 func Initialize(redisURL string) {
+	log := logger.GetLogger()
+
 	opt, err := redis.ParseURL(redisURL)
 	if err != nil {
-		log.Fatal("Failed to parse Redis URL:", err)
+		log.Error("Failed to parse Redis URL", "error", err, "url", redisURL)
+		panic(err)
 	}
 
 	Client = redis.NewClient(opt)
@@ -21,10 +25,11 @@ func Initialize(redisURL string) {
 	ctx := context.Background()
 	_, err = Client.Ping(ctx).Result()
 	if err != nil {
-		log.Fatal("Failed to connect to Redis:", err)
+		log.Error("Failed to connect to Redis", "error", err)
+		panic(err)
 	}
 
-	log.Println("Redis connection established")
+	log.Info("Redis connection established")
 }
 
 func GetClient() *redis.Client {
