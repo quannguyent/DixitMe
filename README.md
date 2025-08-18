@@ -181,27 +181,33 @@ A full-stack implementation of the popular Dixit card game with real-time multip
 - `round_completed` - Round results with scores
 - `game_completed` - Final game results
 
-## File Structure
+## Project Structure
 
 ```
 DixitMe/
-├── cmd/server/main.go          # Main application entry
-├── internal/
-│   ├── config/                 # Configuration management
-│   ├── database/              # Database setup and migrations
-│   ├── redis/                 # Redis client setup
-│   ├── models/                # Database models
-│   ├── game/                  # Game logic and state management
-│   ├── websocket/             # WebSocket handlers
-│   └── handlers/              # HTTP API handlers
-├── web/                       # React frontend
-│   ├── src/
-│   │   ├── components/        # React components
-│   │   ├── store/            # Zustand store
-│   │   └── types/            # TypeScript types
-│   └── public/               # Static assets
-├── assets/cards/             # Card images
-└── go.mod                    # Go module definition
+├── cmd/                    # Command-line applications
+│   ├── server/             # Main server application
+│   └── seed/               # Database seeding tool
+├── internal/               # Backend Go modules
+│   ├── auth/               # Authentication system
+│   ├── bot/                # AI bot players
+│   ├── config/             # Configuration management
+│   ├── database/           # Database setup
+│   ├── game/               # Game logic & state management
+│   ├── handlers/           # HTTP API handlers
+│   ├── logger/             # Structured logging
+│   ├── models/             # Database models
+│   ├── redis/              # Redis client
+│   ├── seeder/             # Database seeding
+│   ├── storage/            # File storage (MinIO)
+│   └── websocket/          # WebSocket communication
+├── web/                    # React frontend
+│   ├── src/components/     # React components
+│   ├── src/store/          # Zustand state management
+│   └── src/types/          # TypeScript definitions
+├── assets/cards/           # Card images
+├── scripts/                # Utility scripts
+└── docs/                   # API documentation
 ```
 
 ## Development
