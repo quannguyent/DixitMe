@@ -13,6 +13,7 @@ package main
 
 import (
 	_ "dixitme/docs" // Import docs for swagger
+	"dixitme/internal/auth"
 	"dixitme/internal/bot"
 	"dixitme/internal/config"
 	"dixitme/internal/database"
@@ -62,6 +63,11 @@ func main() {
 		// Continue without seeding - not critical for startup
 	}
 
+	// Initialize authentication services
+	jwtService := auth.NewJWTService(cfg.Auth.JWTSecret)
+	authService := auth.NewAuthService(jwtService)
+	authHandlers := auth.NewAuthHandlers(authService, jwtService)
+
 	// Create Gin router (without default logger)
 	r := gin.New()
 
@@ -83,47 +89,85 @@ func main() {
 	// API routes
 	api := r.Group("/api/v1")
 	{
-		// Player routes
-		api.POST("/players", handlers.CreatePlayer)
-		api.GET("/players/:id", handlers.GetPlayer)
-		api.GET("/player/:player_id/stats", handlers.GetPlayerStats)
-		api.GET("/player/:player_id/history", handlers.GetGameHistory)
+		// Authentication routes (public)
+		authGroup := api.Group("/auth")
+		{
+			authGroup.POST("/register", authHandlers.Register)
+			authGroup.POST("/login", authHandlers.Login)
+			authGroup.POST("/google", authHandlers.GoogleLogin)
+			authGroup.POST("/guest", authHandlers.GuestLogin)
+			authGroup.POST("/refresh", authHandlers.RefreshToken)
 
-		// Game routes
-		api.GET("/games", handlers.GetGames)
-		api.GET("/games/:room_code", handlers.GetGame)
+			// Protected auth routes
+			authGroup.POST("/logout", auth.RequireAuth(jwtService), authHandlers.Logout)
+			authGroup.GET("/me", auth.RequireAuth(jwtService), authHandlers.GetCurrentUser)
+			authGroup.GET("/validate", auth.RequireAuth(jwtService), authHandlers.ValidateToken)
+		}
 
-		// Card management routes
-		api.POST("/cards", handlers.CreateCard)
-		api.GET("/cards", handlers.ListCards)
-		api.GET("/cards/:card_id", handlers.GetCardWithTags)
-		api.POST("/cards/:card_id/image", handlers.UploadCardImage)
+		// Player routes (allow both auth and guest)
+		playerGroup := api.Group("/players")
+		playerGroup.Use(auth.GuestOrAuth(jwtService))
+		{
+			playerGroup.POST("", handlers.CreatePlayer)
+			playerGroup.GET("/:id", handlers.GetPlayer)
+			playerGroup.GET("/:player_id/stats", handlers.GetPlayerStats)
+			playerGroup.GET("/:player_id/history", handlers.GetGameHistory)
+		}
 
-		// Legacy card route for compatibility
-		api.GET("/cards/legacy", handlers.GetCards)
+		// Game routes (allow both auth and guest)
+		gameGroup := api.Group("/games")
+		gameGroup.Use(auth.GuestOrAuth(jwtService))
+		{
+			gameGroup.GET("", handlers.GetGames)
+			gameGroup.GET("/:room_code", handlers.GetGame)
+			gameGroup.POST("/add-bot", handlers.AddBotToGame)
+		}
+
+		// Card management routes (require auth for modifications, allow guest for reading)
+		cardsGroup := api.Group("/cards")
+		{
+			cardsGroup.GET("", handlers.ListCards)                                                     // Public
+			cardsGroup.GET("/legacy", handlers.GetCards)                                               // Public
+			cardsGroup.GET("/:card_id", handlers.GetCardWithTags)                                      // Public
+			cardsGroup.POST("", auth.RequireAuth(jwtService), handlers.CreateCard)                     // Auth required
+			cardsGroup.POST("/:card_id/image", auth.RequireAuth(jwtService), handlers.UploadCardImage) // Auth required
+		}
 
 		// Tag management routes
-		api.POST("/tags", handlers.CreateTag)
-		api.GET("/tags", handlers.ListTags)
+		tagsGroup := api.Group("/tags")
+		{
+			tagsGroup.GET("", handlers.ListTags)                                 // Public
+			tagsGroup.POST("", auth.RequireAuth(jwtService), handlers.CreateTag) // Auth required
+		}
 
 		// Bot management routes
-		api.POST("/games/add-bot", handlers.AddBotToGame)
-		api.GET("/bots/stats", handlers.GetBotStats)
+		botGroup := api.Group("/bots")
+		{
+			botGroup.GET("/stats", handlers.GetBotStats) // Public
+		}
 
-		// Admin routes for database management
-		api.POST("/admin/seed", handlers.SeedDatabase)
-		api.POST("/admin/seed/tags", handlers.SeedTags)
-		api.POST("/admin/seed/cards", handlers.SeedCards)
-		api.GET("/admin/stats", handlers.GetDatabaseStats)
+		// Admin routes (require auth)
+		adminGroup := api.Group("/admin")
+		adminGroup.Use(auth.RequireAuth(jwtService)) // All admin routes require auth
+		{
+			adminGroup.POST("/seed", handlers.SeedDatabase)
+			adminGroup.POST("/seed/tags", handlers.SeedTags)
+			adminGroup.POST("/seed/cards", handlers.SeedCards)
+			adminGroup.GET("/stats", handlers.GetDatabaseStats)
+		}
 
-		// Chat routes
-		api.POST("/chat/send", handlers.SendChatMessage)
-		api.GET("/chat/history", handlers.GetChatHistory)
-		api.GET("/chat/stats", handlers.GetChatStats)
+		// Chat routes (require session - guest or auth)
+		chatGroup := api.Group("/chat")
+		chatGroup.Use(auth.GuestOrAuth(jwtService))
+		{
+			chatGroup.POST("/send", handlers.SendChatMessage)
+			chatGroup.GET("/history", handlers.GetChatHistory)
+			chatGroup.GET("/stats", handlers.GetChatStats)
+		}
 	}
 
-	// WebSocket endpoint
-	r.GET("/ws", websocketHandler.HandleWebSocket)
+	// WebSocket endpoint (with optional authentication)
+	r.GET("/ws", websocketHandler.HandleWebSocketWithAuth(jwtService))
 
 	// Serve static files (for card images in development)
 	r.Static("/cards", "./assets/cards")

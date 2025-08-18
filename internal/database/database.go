@@ -35,6 +35,8 @@ func Initialize(databaseURL string) {
 
 func migrate() error {
 	return DB.AutoMigrate(
+		&models.User{},
+		&models.Session{},
 		&models.Player{},
 		&models.Game{},
 		&models.GamePlayer{},

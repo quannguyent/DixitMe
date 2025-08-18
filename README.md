@@ -12,6 +12,7 @@ A full-stack implementation of the popular Dixit card game with real-time multip
 - **Game lobby system** with room codes
 - **Player statistics** and game history
 - **Real-time chat** in lobby and voting phases with system notifications
+- **Flexible authentication** supporting registered users, Google SSO, and guest access
 
 ## Tech Stack
 
@@ -26,6 +27,7 @@ A full-stack implementation of the popular Dixit card game with real-time multip
 - **AI System**: Heuristic bot players with weighted random selection
 - **Asset Management**: Automated database seeding with 84+ cards
 - **Chat System**: Real-time messaging with phase-based restrictions and system notifications
+- **Authentication**: JWT-based auth with Google OAuth2, password, and guest support
 - **Architecture**: Monolithic with clean separation of concerns
 
 ### Frontend (React)
@@ -503,6 +505,146 @@ type ChatMessage struct {
 - System messages provide context for game state changes
 - Bot players don't participate in chat (system messages only)
 - Chat history persists across browser refreshes
+
+## Authentication System
+
+### Player Tracking & Sessions
+
+The game supports three types of player authentication, providing flexibility for different user preferences:
+
+**1. Registered Users (Username/Password)**
+- Full account creation with email and password
+- Persistent player statistics and game history
+- Cross-device session management
+- Personalized profile with display name and avatar
+
+**2. Google OAuth2 SSO**  
+- One-click sign-in with Google account
+- Automatic account creation on first login
+- Secure authentication without password management
+- Profile information synced from Google
+
+**3. Guest Access**
+- Play immediately without registration
+- Temporary session-based identification
+- Basic functionality with limited persistence
+- Can upgrade to registered account later
+
+### Session Management
+
+**JWT Token-Based Authentication**:
+- Secure stateless authentication using JWT tokens
+- 24-hour token expiration with refresh capability
+- Session tracking in PostgreSQL database
+- Support for multiple concurrent sessions
+
+**Flexible Token Delivery**:
+- HTTP Authorization header (`Bearer <token>`)
+- HTTP-only cookies (recommended for web)
+- WebSocket query parameters for real-time connections
+
+### Authentication Flow
+
+#### User Registration
+```bash
+# Register new account
+curl -X POST http://localhost:8080/api/v1/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "player@example.com",
+    "username": "player123", 
+    "display_name": "Cool Player",
+    "password": "securepassword123"
+  }'
+```
+
+#### Password Login
+```bash
+# Login with email/username
+curl -X POST http://localhost:8080/api/v1/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email_or_username": "player@example.com",
+    "password": "securepassword123"
+  }'
+```
+
+#### Google OAuth Login
+```bash
+# Login with Google OAuth token
+curl -X POST http://localhost:8080/api/v1/auth/google \
+  -H "Content-Type: application/json" \
+  -d '{
+    "access_token": "google_oauth_access_token"
+  }'
+```
+
+#### Guest Session
+```bash
+# Create guest session
+curl -X POST http://localhost:8080/api/v1/auth/guest \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "Guest Player"
+  }'
+```
+
+### WebSocket Authentication
+
+The WebSocket connection supports multiple authentication methods:
+
+```javascript
+// Authenticated connection with token in URL
+const ws = new WebSocket('ws://localhost:8080/ws?token=jwt_token_here');
+
+// Guest connection with player ID
+const ws = new WebSocket('ws://localhost:8080/ws?player_id=guest_uuid');
+
+// Cookie-based authentication (automatic)
+const ws = new WebSocket('ws://localhost:8080/ws');
+```
+
+### API Security Levels
+
+**Public Endpoints** (no authentication required):
+- Card browsing and details
+- Tag listing
+- Bot statistics
+- Health checks
+
+**Session Required** (guest or registered):
+- Game creation and joining
+- Chat messaging
+- Player statistics
+
+**Authentication Required** (registered users only):
+- Card creation and image uploads
+- Tag management
+- Account management
+
+**Admin Only** (authenticated + admin privileges):
+- Database seeding
+- System administration
+
+### Environment Configuration
+
+Add authentication settings to your `.env` file:
+
+```bash
+# Authentication configuration
+JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+GOOGLE_CLIENT_ID=your-google-oauth-client-id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=your-google-oauth-client-secret
+```
+
+### Security Features
+
+- **Password Hashing**: bcrypt with configurable cost
+- **Token Security**: HMAC-signed JWT with expiration
+- **Session Management**: Database-tracked with cleanup
+- **CORS Protection**: Configurable origins
+- **Rate Limiting**: Ready for implementation
+- **XSS Protection**: HTTP-only cookies option
 
 ## Troubleshooting
 

@@ -18,6 +18,14 @@ type Config struct {
 	GinMode     string
 	Logger      logger.Config
 	MinIO       storage.MinIOConfig
+	Auth        AuthConfig
+}
+
+// AuthConfig holds authentication configuration
+type AuthConfig struct {
+	JWTSecret          string
+	GoogleClientID     string
+	GoogleClientSecret string
 }
 
 func Load() *Config {
@@ -43,6 +51,11 @@ func Load() *Config {
 			BucketName:      getEnv("MINIO_BUCKET", "dixitme-cards"),
 			UseSSL:          getBoolEnv("MINIO_USE_SSL", false),
 			Region:          getEnv("MINIO_REGION", "us-east-1"),
+		},
+		Auth: AuthConfig{
+			JWTSecret:          getEnv("JWT_SECRET", "dev-secret-change-in-production"),
+			GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
+			GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
 		},
 	}
 }

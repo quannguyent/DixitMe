@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"dixitme/internal/auth"
 	"dixitme/internal/game"
 	"dixitme/internal/logger"
 	"dixitme/internal/models"
@@ -88,7 +89,7 @@ type GetChatHistoryPayload struct {
 	Limit    int    `json:"limit,omitempty"` // default 50
 }
 
-// HandleWebSocket handles WebSocket connections
+// HandleWebSocket handles WebSocket connections (legacy, no auth)
 func HandleWebSocket(c *gin.Context) {
 	// Get player ID from query params or create new one
 	playerIDStr := c.Query("player_id")
@@ -105,6 +106,46 @@ func HandleWebSocket(c *gin.Context) {
 		playerID = uuid.New()
 	}
 
+	handleWebSocketConnection(c, playerID, nil)
+}
+
+// HandleWebSocketWithAuth handles WebSocket connections with authentication support
+func HandleWebSocketWithAuth(jwtService *auth.JWTService) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var playerID uuid.UUID
+		var userInfo *auth.UserInfo
+
+		// Try to extract authentication info
+		token := extractTokenFromWebSocket(c)
+		if token != "" {
+			if info, err := jwtService.ExtractUserInfo(token); err == nil {
+				userInfo = info
+				playerID = info.SessionID // Use session ID as player ID for consistency
+			}
+		}
+
+		// If no valid auth, fall back to legacy behavior
+		if userInfo == nil {
+			playerIDStr := c.Query("player_id")
+			var err error
+
+			if playerIDStr != "" {
+				playerID, err = uuid.Parse(playerIDStr)
+				if err != nil {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid player ID"})
+					return
+				}
+			} else {
+				playerID = uuid.New()
+			}
+		}
+
+		handleWebSocketConnection(c, playerID, userInfo)
+	}
+}
+
+// handleWebSocketConnection handles the actual WebSocket connection logic
+func handleWebSocketConnection(c *gin.Context, playerID uuid.UUID, userInfo *auth.UserInfo) {
 	// Upgrade HTTP connection to WebSocket
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
@@ -113,13 +154,27 @@ func HandleWebSocket(c *gin.Context) {
 	}
 	defer conn.Close()
 
-	logger.Info("WebSocket connection established", "player_id", playerID)
+	var playerName string
+	var authType string
+	if userInfo != nil {
+		playerName = userInfo.Name
+		authType = string(userInfo.AuthType)
+		logger.Info("Authenticated WebSocket connection established",
+			"player_id", playerID, "auth_type", authType, "name", playerName)
+	} else {
+		playerName = "Guest " + playerID.String()[:8]
+		authType = "guest"
+		logger.Info("Guest WebSocket connection established", "player_id", playerID)
+	}
 
 	// Send initial connection confirmation
 	welcomeMsg := game.GameMessage{
 		Type: "connection_established",
 		Payload: map[string]interface{}{
-			"player_id": playerID,
+			"player_id":     playerID,
+			"player_name":   playerName,
+			"auth_type":     authType,
+			"authenticated": userInfo != nil,
 		},
 	}
 	if err := conn.WriteJSON(welcomeMsg); err != nil {
@@ -145,6 +200,28 @@ func HandleWebSocket(c *gin.Context) {
 
 	// Clean up on disconnect
 	handleDisconnect(playerID)
+}
+
+// extractTokenFromWebSocket extracts JWT token from WebSocket connection
+func extractTokenFromWebSocket(c *gin.Context) string {
+	// Try query parameter first (for WebSocket connections)
+	if token := c.Query("token"); token != "" {
+		return token
+	}
+
+	// Try Authorization header
+	if authHeader := c.GetHeader("Authorization"); authHeader != "" {
+		if len(authHeader) > 7 && authHeader[:7] == "Bearer " {
+			return authHeader[7:]
+		}
+	}
+
+	// Try cookie
+	if cookie, err := c.Cookie("auth_token"); err == nil {
+		return cookie
+	}
+
+	return ""
 }
 
 func handleMessage(conn *websocket.Conn, playerID uuid.UUID, msg ConnectionMessage) error {
