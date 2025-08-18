@@ -19,6 +19,7 @@ A full-stack implementation of the popular Dixit card game with real-time multip
 - **Database**: PostgreSQL with GORM
 - **Cache**: Redis for state synchronization
 - **WebSockets**: Gorilla WebSocket for real-time communication
+- **API Documentation**: Swagger/OpenAPI 2.0 with interactive UI
 - **Architecture**: Monolithic with clean separation of concerns
 
 ### Frontend (React)
@@ -77,12 +78,19 @@ A full-stack implementation of the popular Dixit card game with real-time multip
    CREATE DATABASE dixitme;
    ```
 
-5. **Run the backend:**
+5. **Generate Swagger documentation (optional):**
+   ```bash
+   ./scripts/generate-swagger.sh
+   ```
+
+6. **Run the backend:**
    ```bash
    go run cmd/server/main.go
    ```
 
    The server will start on `http://localhost:8080`
+   - **API**: `http://localhost:8080/api/v1/`
+   - **Swagger UI**: `http://localhost:8080/swagger/index.html`
 
 ### Frontend Setup
 
@@ -123,16 +131,25 @@ A full-stack implementation of the popular Dixit card game with real-time multip
 
 ## API Endpoints
 
+### 📊 Interactive API Documentation
+- **Swagger UI**: `GET /swagger/index.html` - Interactive API documentation
+- **OpenAPI JSON**: `GET /swagger/doc.json` - Machine-readable API specification
+- **OpenAPI YAML**: Access the YAML specification in `docs/swagger.yaml`
+
 ### REST API
 - `GET /health` - Health check
 - `POST /api/v1/players` - Create player
 - `GET /api/v1/players/:id` - Get player info
-- `GET /api/v1/games` - List games
+- `GET /api/v1/player/:player_id/stats` - Get player statistics
+- `GET /api/v1/player/:player_id/history` - Get player game history
+- `GET /api/v1/games` - List games (with pagination and filtering)
 - `GET /api/v1/games/:room_code` - Get game info
 - `GET /api/v1/cards` - Get card list
 
 ### WebSocket
 - `GET /ws` - WebSocket connection for real-time game updates
+
+> **💡 Tip**: Visit `http://localhost:8080/swagger/index.html` after starting the server to explore the API interactively!
 
 ## WebSocket Messages
 
@@ -180,6 +197,14 @@ DixitMe/
 ```
 
 ## Development
+
+### API Documentation
+- **Regenerate Swagger docs** after making API changes:
+  ```bash
+  ./scripts/generate-swagger.sh
+  ```
+- **Swagger annotations**: Add/update `@Summary`, `@Description`, etc. in handler functions
+- **Custom types**: Document request/response structures with proper JSON tags
 
 ### Adding New Cards
 1. Add card images to `assets/cards/` (numbered 1.jpg, 2.jpg, etc.)

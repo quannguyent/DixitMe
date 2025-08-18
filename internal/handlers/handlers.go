@@ -39,6 +39,16 @@ type GetGamesResponse struct {
 }
 
 // CreatePlayer creates a new player
+// @Summary Create a new player
+// @Description Create a new player with a given name
+// @Tags players
+// @Accept json
+// @Produce json
+// @Param player body CreatePlayerRequest true "Player information"
+// @Success 201 {object} CreatePlayerResponse
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /players [post]
 func CreatePlayer(c *gin.Context) {
 	var req CreatePlayerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -61,6 +71,16 @@ func CreatePlayer(c *gin.Context) {
 }
 
 // GetPlayer gets a player by ID
+// @Summary Get player by ID
+// @Description Get player information by player ID
+// @Tags players
+// @Accept json
+// @Produce json
+// @Param id path string true "Player ID" format(uuid)
+// @Success 200 {object} map[string]models.Player
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /players/{id} [get]
 func GetPlayer(c *gin.Context) {
 	playerIDStr := c.Param("id")
 	playerID, err := uuid.Parse(playerIDStr)
@@ -80,6 +100,16 @@ func GetPlayer(c *gin.Context) {
 }
 
 // GetGame gets game information by room code
+// @Summary Get game by room code
+// @Description Get game information and status by room code
+// @Tags games
+// @Accept json
+// @Produce json
+// @Param room_code path string true "Room Code"
+// @Success 200 {object} GetGameResponse
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Router /games/{room_code} [get]
 func GetGame(c *gin.Context) {
 	var req GetGameRequest
 	if err := c.ShouldBindUri(&req); err != nil {
@@ -106,6 +136,17 @@ func GetGame(c *gin.Context) {
 }
 
 // GetGames gets all games with pagination
+// @Summary List all games
+// @Description Get a paginated list of all games with optional status filter
+// @Tags games
+// @Accept json
+// @Produce json
+// @Param page query int false "Page number" default(1)
+// @Param limit query int false "Items per page" default(10)
+// @Param status query string false "Game status filter" Enums(waiting,in_progress,completed,abandoned)
+// @Success 200 {object} GetGamesResponse
+// @Failure 500 {object} map[string]string
+// @Router /games [get]
 func GetGames(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "10"))
@@ -129,6 +170,18 @@ func GetGames(c *gin.Context) {
 }
 
 // GetGameHistory gets game history for a player
+// @Summary Get player game history
+// @Description Get paginated game history for a specific player
+// @Tags players
+// @Accept json
+// @Produce json
+// @Param player_id path string true "Player ID" format(uuid)
+// @Param page query int false "Page number" default(1)
+// @Param limit query int false "Items per page" default(10)
+// @Success 200 {object} map[string][]models.GameHistory
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /player/{player_id}/history [get]
 func GetGameHistory(c *gin.Context) {
 	playerIDStr := c.Param("player_id")
 	playerID, err := uuid.Parse(playerIDStr)
@@ -156,6 +209,15 @@ func GetGameHistory(c *gin.Context) {
 }
 
 // GetPlayerStats gets statistics for a player
+// @Summary Get player statistics
+// @Description Get comprehensive statistics for a specific player
+// @Tags players
+// @Accept json
+// @Produce json
+// @Param player_id path string true "Player ID" format(uuid)
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Router /player/{player_id}/stats [get]
 func GetPlayerStats(c *gin.Context) {
 	playerIDStr := c.Param("player_id")
 	playerID, err := uuid.Parse(playerIDStr)
@@ -200,6 +262,14 @@ func GetPlayerStats(c *gin.Context) {
 }
 
 // HealthCheck endpoint for monitoring
+// @Summary Health check
+// @Description Check the health status of the API and its dependencies
+// @Tags system
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /health [get]
 func HealthCheck(c *gin.Context) {
 	db := database.GetDB()
 	sqlDB, err := db.DB()
@@ -231,6 +301,13 @@ func HealthCheck(c *gin.Context) {
 }
 
 // GetCards returns the list of available cards (placeholder implementation)
+// @Summary Get available cards
+// @Description Get the list of all available cards in the game
+// @Tags cards
+// @Accept json
+// @Produce json
+// @Success 200 {object} map[string][]map[string]interface{}
+// @Router /cards [get]
 func GetCards(c *gin.Context) {
 	// In a real implementation, you'd load this from a file or database
 	// For now, we'll return a simple structure representing cards

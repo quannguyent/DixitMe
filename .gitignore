@@ -5,6 +5,7 @@
 *.so
 *.dylib
 dixitme
+server
 
 # Test binary, built with `go test -c`
 *.test
@@ -12,11 +13,12 @@ dixitme
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+# Go dependency directories
+vendor/
 
 # Go workspace file
 go.work
+go.work.sum
 
 # Environment variables
 .env
@@ -24,6 +26,7 @@ go.work
 .env.development.local
 .env.test.local
 .env.production.local
+config.env
 
 # IDE files
 .vscode/
@@ -31,6 +34,8 @@ go.work
 *.swp
 *.swo
 *~
+.vim/
+.netrwhist
 
 # OS generated files
 .DS_Store
@@ -40,25 +45,110 @@ go.work
 .Trashes
 ehthumbs.db
 Thumbs.db
+Desktop.ini
 
 # Logs
 *.log
 logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
 # Frontend dependencies and build
 web/node_modules/
 web/build/
 web/dist/
 web/.env
+web/.env.local
+web/.env.development.local
+web/.env.test.local
+web/.env.production.local
+web/coverage/
+web/.nyc_output
+web/.eslintcache
+web/.parcel-cache/
+web/.cache/
+web/storybook-static/
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
 
 # Database files
 *.db
 *.sqlite
+*.sqlite3
 
 # Temporary files
 tmp/
 temp/
+.tmp/
+
+# Docker
+.dockerignore
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Memory dumps
+*.dmp
+
+# Swagger auto-generated files (uncomment if you want to regenerate them each time)
+# docs/docs.go
+# docs/swagger.json
+# docs/swagger.yaml
 
 # Card images (you may want to commit your actual card images)
 # assets/cards/*.jpg
 # assets/cards/*.png
+
+# Build artifacts
+dist/
+build/
+out/
+
+# MacOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# Test coverage
+coverage/
+*.cover
+*.coverprofile
+coverage.out
+
+# Air (Go hot reload)
+.air.toml
+tmp/
+
+# Local development
+*.local

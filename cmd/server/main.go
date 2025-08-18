@@ -1,8 +1,20 @@
+// @title DixitMe API
+// @version 1.0
+// @description API for DixitMe - Online Dixit Card Game
+// @description This API provides endpoints for managing players, games, and real-time gameplay through WebSocket connections.
+// @contact.name DixitMe API Support
+// @contact.email support@dixitme.com
+// @license.name MIT
+// @license.url https://opensource.org/licenses/MIT
+// @host localhost:8080
+// @BasePath /api/v1
+// @schemes http https
 package main
 
 import (
 	"log"
 
+	_ "dixitme/docs" // Import docs for swagger
 	"dixitme/internal/config"
 	"dixitme/internal/database"
 	"dixitme/internal/handlers"
@@ -10,6 +22,8 @@ import (
 	websocketHandler "dixitme/internal/websocket"
 
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func main() {
@@ -30,6 +44,9 @@ func main() {
 
 	// Add CORS middleware
 	r.Use(handlers.CORSMiddleware())
+
+	// Swagger documentation endpoint
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 
 	// Health check endpoint
 	r.GET("/health", handlers.HealthCheck)
