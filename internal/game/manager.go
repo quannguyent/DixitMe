@@ -21,8 +21,11 @@ import (
 
 // Manager manages all active games
 type Manager struct {
-	games map[string]*GameState
-	mu    sync.RWMutex
+	games           map[string]*GameState
+	mu              sync.RWMutex
+	cleanupInterval time.Duration
+	inactiveTimeout time.Duration
+	stopCleanup     chan bool
 }
 
 var gameManager *Manager
@@ -31,8 +34,13 @@ var gameManager *Manager
 func GetManager() *Manager {
 	if gameManager == nil {
 		gameManager = &Manager{
-			games: make(map[string]*GameState),
+			games:           make(map[string]*GameState),
+			cleanupInterval: 2 * time.Minute,  // Check every 2 minutes
+			inactiveTimeout: 10 * time.Minute, // This will be dynamic based on room state
+			stopCleanup:     make(chan bool),
 		}
+		// Start the cleanup goroutine
+		go gameManager.startCleanupService()
 	}
 	return gameManager
 }
@@ -49,14 +57,16 @@ func (m *Manager) CreateGame(roomCode string, creatorID uuid.UUID, creatorName s
 
 	// Create new game state
 	gameID := uuid.New()
+	now := time.Now()
 	game := &GameState{
-		ID:          gameID,
-		RoomCode:    roomCode,
-		Players:     make(map[uuid.UUID]*Player),
-		Status:      models.GameStatusWaiting,
-		RoundNumber: 0,
-		MaxRounds:   6, // Will be adjusted based on player count
-		CreatedAt:   time.Now(),
+		ID:           gameID,
+		RoomCode:     roomCode,
+		Players:      make(map[uuid.UUID]*Player),
+		Status:       models.GameStatusWaiting,
+		RoundNumber:  0,
+		MaxRounds:    6, // Will be adjusted based on player count
+		CreatedAt:    now,
+		LastActivity: now,
 	}
 
 	// Add creator as first player
@@ -78,7 +88,12 @@ func (m *Manager) CreateGame(roomCode string, creatorID uuid.UUID, creatorName s
 	// Persist to database
 	if err := m.persistGame(game); err != nil {
 		delete(m.games, roomCode)
-		return nil, fmt.Errorf("failed to persist game: %w", err)
+		// Check if it's a duplicate key error
+		if strings.Contains(err.Error(), "duplicate key value violates unique constraint") &&
+			strings.Contains(err.Error(), "games_room_code_key") {
+			return nil, fmt.Errorf("room code '%s' is already taken, please try a different one", roomCode)
+		}
+		return nil, fmt.Errorf("failed to create game: %w", err)
 	}
 
 	// Store in Redis for scaling
@@ -101,6 +116,9 @@ func (m *Manager) JoinGame(roomCode string, playerID uuid.UUID, playerName strin
 
 	game.mu.Lock()
 	defer game.mu.Unlock()
+
+	// Update activity
+	game.LastActivity = time.Now()
 
 	// Check if game is still accepting players
 	if game.Status != models.GameStatusWaiting {
@@ -262,6 +280,9 @@ func (m *Manager) StartGame(roomCode string, playerID uuid.UUID) error {
 
 	game.mu.Lock()
 	defer game.mu.Unlock()
+
+	// Update activity
+	game.LastActivity = time.Now()
 
 	// Check if player is in the game
 	if _, exists := game.Players[playerID]; !exists {
@@ -1202,4 +1223,141 @@ func (m *Manager) getChatMessages(gameID uuid.UUID, phase string, limit int) ([]
 	}
 
 	return messages, nil
+}
+
+// startCleanupService runs a background goroutine to clean up inactive games
+func (m *Manager) startCleanupService() {
+	ticker := time.NewTicker(m.cleanupInterval)
+	defer ticker.Stop()
+
+	logger.Info("Game cleanup service started",
+		"check_interval", m.cleanupInterval,
+		"empty_room_timeout", "10m",
+		"occupied_room_timeout", "30m")
+
+	for {
+		select {
+		case <-ticker.C:
+			m.cleanupInactiveGames()
+		case <-m.stopCleanup:
+			logger.Info("Game cleanup service stopped")
+			return
+		}
+	}
+}
+
+// cleanupInactiveGames removes games that have been inactive for too long
+func (m *Manager) cleanupInactiveGames() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	var toRemove []string
+	var emptyRooms []string
+	var occupiedRooms []string
+
+	for roomCode, game := range m.games {
+		game.mu.RLock()
+
+		// Count active/connected players
+		activePlayerCount := 0
+		for _, player := range game.Players {
+			if player.IsConnected {
+				activePlayerCount++
+			}
+		}
+
+		emptyRoomTimeout := 10 * time.Minute    // Empty rooms: 10 minutes
+		occupiedRoomTimeout := 30 * time.Minute // Rooms with players: 30 minutes
+
+		var shouldRemove bool
+		var reason string
+
+		if activePlayerCount == 0 {
+			// Empty room - use shorter timeout
+			shouldRemove = time.Since(game.LastActivity) > emptyRoomTimeout
+			if shouldRemove {
+				emptyRooms = append(emptyRooms, roomCode)
+				reason = "Game closed - empty room (10 minutes)"
+			}
+		} else {
+			// Room has players - use longer timeout
+			shouldRemove = time.Since(game.LastActivity) > occupiedRoomTimeout
+			if shouldRemove {
+				occupiedRooms = append(occupiedRooms, roomCode)
+				reason = "Game closed due to inactivity (30 minutes)"
+			}
+		}
+
+		if shouldRemove {
+			toRemove = append(toRemove, roomCode)
+			// Store reason for later use
+			game.mu.RUnlock()
+
+			// Notify all connected players that the game is being closed
+			m.broadcastGameClosure(game, reason)
+
+			// Mark game as abandoned in database
+			m.markGameAsAbandoned(game)
+		} else {
+			game.mu.RUnlock()
+		}
+	}
+
+	if len(toRemove) > 0 {
+		logger.Info("Cleaning up inactive games",
+			"total_count", len(toRemove),
+			"empty_rooms", len(emptyRooms),
+			"occupied_rooms", len(occupiedRooms),
+			"empty_room_codes", emptyRooms,
+			"occupied_room_codes", occupiedRooms)
+
+		// Remove from memory
+		for _, roomCode := range toRemove {
+			delete(m.games, roomCode)
+		}
+	}
+}
+
+// broadcastGameClosure notifies all players that the game is being closed
+func (m *Manager) broadcastGameClosure(game *GameState, reason string) {
+	game.mu.RLock()
+	defer game.mu.RUnlock()
+
+	message := GameMessage{
+		Type: MessageTypeError,
+		Payload: ErrorPayload{
+			Message: reason,
+		},
+	}
+
+	for _, player := range game.Players {
+		if player.Connection != nil && player.IsConnected {
+			if err := player.Connection.WriteJSON(message); err != nil {
+				logger.Error("Failed to notify player of game closure", "error", err, "player_id", player.ID)
+			}
+		}
+	}
+}
+
+// markGameAsAbandoned updates the game status in the database
+func (m *Manager) markGameAsAbandoned(game *GameState) {
+	db := database.GetDB()
+
+	err := db.Model(&models.Game{}).
+		Where("room_code = ?", game.RoomCode).
+		Updates(map[string]interface{}{
+			"status":     models.GameStatusAbandoned,
+			"updated_at": time.Now(),
+		}).Error
+
+	if err != nil {
+		logger.Error("Failed to mark game as abandoned", "error", err, "room_code", game.RoomCode)
+	}
+}
+
+// StopCleanupService stops the background cleanup service
+func (m *Manager) StopCleanupService() {
+	if m.stopCleanup != nil {
+		close(m.stopCleanup)
+	}
 }

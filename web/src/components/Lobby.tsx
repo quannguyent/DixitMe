@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { useGameStore } from '../store/gameStore';
+import { useAuthStore } from '../store/authStore';
+import UserInfo from './UserInfo';
+import styles from './Lobby.module.css';
 
 const Lobby: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'join' | 'create'>('join');
   const [roomCode, setRoomCode] = useState('');
   const [playerName, setPlayerName] = useState('');
+
+  const { user } = useAuthStore();
 
   const {
     gameState,
@@ -14,9 +19,17 @@ const Lobby: React.FC = () => {
     connect,
     createGame,
     joinGame,
+    addBot,
     startGame,
     setError,
   } = useGameStore();
+
+  // Auto-fill player name from authenticated user
+  useEffect(() => {
+    if (user && !playerName) {
+      setPlayerName(user.name);
+    }
+  }, [user, playerName]);
 
   useEffect(() => {
     if (!isConnected) {
@@ -56,12 +69,21 @@ const Lobby: React.FC = () => {
     }
   };
 
+  const handleAddBot = () => {
+    if (gameState) {
+      addBot(gameState.room_code);
+    }
+  };
+
   const generateRoomCode = () => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let result = '';
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 6; i++) { // Increased to 6 characters for more uniqueness
       result += chars.charAt(Math.floor(Math.random() * chars.length));
     }
+    // Add timestamp suffix to make it more unique
+    const timestamp = Date.now().toString().slice(-3);
+    result = result.substring(0, 3) + timestamp;
     setRoomCode(result);
   };
 
@@ -69,6 +91,7 @@ const Lobby: React.FC = () => {
     return (
       <div className="lobby-container">
         <div className="game-lobby">
+          <UserInfo />
           <div className="lobby-header">
             <h2>Game Lobby</h2>
             <div className="room-code">Room Code: <strong>{gameState.room_code}</strong></div>
@@ -101,14 +124,27 @@ const Lobby: React.FC = () => {
           </div>
 
           <div className="lobby-actions">
-            {gameState.status === 'waiting' && Object.keys(gameState.players).length >= 3 && (
-              <button
-                onClick={handleStartGame}
-                className="start-game-btn"
-                disabled={isLoading}
-              >
-                {isLoading ? 'Starting...' : 'Start Game'}
-              </button>
+            {gameState.status === 'waiting' && (
+              <>
+                {Object.keys(gameState.players).length < 6 && (
+                  <button
+                    onClick={handleAddBot}
+                    className={styles.addBotBtn}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? 'Adding...' : 'Add Bot'}
+                  </button>
+                )}
+                {Object.keys(gameState.players).length >= 3 && (
+                  <button
+                    onClick={handleStartGame}
+                    className={styles.startGameBtn}
+                    disabled={isLoading}
+                  >
+                    {isLoading ? 'Starting...' : 'Start Game'}
+                  </button>
+                )}
+              </>
             )}
           </div>
 
@@ -125,6 +161,7 @@ const Lobby: React.FC = () => {
   return (
     <div className="lobby-container">
       <div className="lobby-form">
+        <UserInfo />
         <div className="form-header">
           <h1>DixitMe</h1>
           <p>Online Dixit Card Game</p>

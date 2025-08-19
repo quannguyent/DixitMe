@@ -111,8 +111,14 @@ func main() {
 		{
 			playerGroup.POST("", handlers.CreatePlayer)
 			playerGroup.GET("/:id", handlers.GetPlayer)
-			playerGroup.GET("/:player_id/stats", handlers.GetPlayerStats)
-			playerGroup.GET("/:player_id/history", handlers.GetGameHistory)
+		}
+
+		// Player stats routes (separate to avoid route conflicts)
+		playerStatsGroup := api.Group("/player")
+		playerStatsGroup.Use(auth.GuestOrAuth(jwtService))
+		{
+			playerStatsGroup.GET("/:player_id/stats", handlers.GetPlayerStats)
+			playerStatsGroup.GET("/:player_id/history", handlers.GetGameHistory)
 		}
 
 		// Game routes (allow both auth and guest)
@@ -155,6 +161,7 @@ func main() {
 			adminGroup.POST("/seed/tags", handlers.SeedTags)
 			adminGroup.POST("/seed/cards", handlers.SeedCards)
 			adminGroup.GET("/stats", handlers.GetDatabaseStats)
+			adminGroup.POST("/cleanup", handlers.CleanupOldGames)
 		}
 
 		// Chat routes (require session - guest or auth)

@@ -1,5 +1,7 @@
 import React, { useEffect } from 'react';
 import { useGameStore } from './store/gameStore';
+import { useAuthStore } from './store/authStore';
+import GameLanding from './components/GameLanding';
 import Lobby from './components/Lobby';
 import GameBoard from './components/GameBoard';
 
@@ -30,8 +32,10 @@ function App() {
     <div className="App">
       {gameState && gameState.status !== 'waiting' ? (
         <GameBoard />
-      ) : (
+      ) : gameState && gameState.status === 'waiting' ? (
         <Lobby />
+      ) : (
+        <GameLanding />
       )}
     </div>
   );

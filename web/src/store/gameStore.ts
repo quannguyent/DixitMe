@@ -24,6 +24,7 @@ interface GameStore {
   disconnect: () => void;
   createGame: (roomCode: string, playerName: string) => void;
   joinGame: (roomCode: string, playerName: string) => void;
+  addBot: (roomCode: string, botName?: string, difficulty?: string) => void;
   startGame: (roomCode: string) => void;
   submitClue: (roomCode: string, clue: string, cardId: number) => void;
   submitCard: (roomCode: string, cardId: number) => void;
@@ -64,9 +65,32 @@ export const useGameStore = create<GameStore>()(
           return; // Already connected
         }
 
-        const wsUrl = state.playerId 
-          ? `${WEBSOCKET_URL}?player_id=${state.playerId}`
-          : WEBSOCKET_URL;
+        // Get auth token from localStorage (since auth store uses persist)
+        let token = null;
+        try {
+          const authStorage = localStorage.getItem('auth-store');
+          if (authStorage) {
+            const parsed = JSON.parse(authStorage);
+            token = parsed.state?.token;
+          }
+        } catch (error) {
+          console.warn('Failed to get auth token:', error);
+        }
+
+        let wsUrl = WEBSOCKET_URL;
+        const params = new URLSearchParams();
+        
+        if (state.playerId) {
+          params.append('player_id', state.playerId);
+        }
+        
+        if (token) {
+          params.append('token', token);
+        }
+        
+        if (params.toString()) {
+          wsUrl += '?' + params.toString();
+        }
 
         const socket = new WebSocket(wsUrl);
 
@@ -143,6 +167,38 @@ export const useGameStore = create<GameStore>()(
 
         state.socket.send(JSON.stringify(message));
         set({ isLoading: true, error: null }, false, 'joining-game');
+      },
+
+      addBot: async (roomCode, botName = 'Bot', difficulty = 'medium') => {
+        try {
+          set({ isLoading: true, error: null }, false, 'adding-bot');
+          
+          const response = await fetch('/api/v1/games/add-bot', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              room_code: roomCode,
+              bot_name: botName,
+              difficulty: difficulty
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to add bot');
+          }
+
+          // Bot added successfully - the server will send a game state update via WebSocket
+          set({ isLoading: false }, false, 'bot-added');
+        } catch (error) {
+          console.error('Error adding bot:', error);
+          set({ 
+            error: error instanceof Error ? error.message : 'Failed to add bot',
+            isLoading: false 
+          }, false, 'add-bot-error');
+        }
       },
 
       startGame: (roomCode) => {
@@ -257,7 +313,18 @@ function handleWebSocketMessage(
 
     case MessageTypes.ERROR:
       const { message: errorMessage } = message.payload;
-      set({ error: errorMessage, isLoading: false }, false, 'websocket-error');
+      
+      // If game was closed due to inactivity, also clear the game state
+      if (errorMessage.includes('Game closed')) {
+        set({ 
+          error: errorMessage, 
+          isLoading: false,
+          gameState: null,
+          currentPlayer: null
+        }, false, 'game-closed-error');
+      } else {
+        set({ error: errorMessage, isLoading: false }, false, 'websocket-error');
+      }
       break;
 
     case MessageTypes.PLAYER_JOINED:

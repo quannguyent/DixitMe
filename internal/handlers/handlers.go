@@ -1050,6 +1050,31 @@ func GetDatabaseStats(c *gin.Context) {
 	c.JSON(http.StatusOK, stats)
 }
 
+// @Summary Cleanup old games
+// @Description Remove completed and abandoned games older than 24 hours
+// @Tags admin
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /admin/cleanup [post]
+func CleanupOldGames(c *gin.Context) {
+	db := database.GetDB()
+
+	// Delete games that are completed or abandoned and older than 24 hours
+	result := db.Where("status IN (?, ?) AND updated_at < ?",
+		"completed", "abandoned", time.Now().Add(-24*time.Hour)).Delete(&models.Game{})
+
+	if result.Error != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to cleanup games"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":       true,
+		"message":       "Old games cleaned up successfully",
+		"deleted_count": result.RowsAffected,
+	})
+}
+
 // Request/Response types
 
 type CreateCardRequest struct {

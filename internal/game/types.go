@@ -20,6 +20,7 @@ type GameState struct {
 	RoundNumber  int                   `json:"round_number"`
 	MaxRounds    int                   `json:"max_rounds"`
 	CreatedAt    time.Time             `json:"created_at"`
+	LastActivity time.Time             `json:"last_activity"`
 	mu           sync.RWMutex          `json:"-"`
 }
 
@@ -31,6 +32,20 @@ func (gs *GameState) Lock() {
 // Unlock unlocks the game state
 func (gs *GameState) Unlock() {
 	gs.mu.Unlock()
+}
+
+// UpdateActivity updates the last activity timestamp
+func (gs *GameState) UpdateActivity() {
+	gs.mu.Lock()
+	defer gs.mu.Unlock()
+	gs.LastActivity = time.Now()
+}
+
+// IsInactive checks if the game has been inactive for the given duration
+func (gs *GameState) IsInactive(duration time.Duration) bool {
+	gs.mu.RLock()
+	defer gs.mu.RUnlock()
+	return time.Since(gs.LastActivity) > duration
 }
 
 // Player represents an active player in the game
