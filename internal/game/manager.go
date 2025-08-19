@@ -58,13 +58,27 @@ func (m *Manager) CreateGame(roomCode string, creatorID uuid.UUID, creatorName s
 	// Create new game state
 	gameID := uuid.New()
 	now := time.Now()
+	
+	// Initialize deck with all available cards (1-84 for standard Dixit)
+	deck := make([]int, 84)
+	for i := 0; i < 84; i++ {
+		deck[i] = i + 1
+	}
+	// Shuffle the deck
+	for i := len(deck) - 1; i > 0; i-- {
+		j := rand.Intn(i + 1)
+		deck[i], deck[j] = deck[j], deck[i]
+	}
+	
 	game := &GameState{
 		ID:           gameID,
 		RoomCode:     roomCode,
 		Players:      make(map[uuid.UUID]*Player),
 		Status:       models.GameStatusWaiting,
 		RoundNumber:  0,
-		MaxRounds:    6, // Will be adjusted based on player count
+		MaxRounds:    999, // Will be determined by 30 points or empty deck
+		Deck:         deck,
+		UsedCards:    make([]int, 0),
 		CreatedAt:    now,
 		LastActivity: now,
 	}
@@ -148,8 +162,7 @@ func (m *Manager) JoinGame(roomCode string, playerID uuid.UUID, playerName strin
 
 	game.Players[playerID] = player
 
-	// Adjust max rounds based on player count (each player gets 2 rounds as storyteller)
-	game.MaxRounds = len(game.Players) * 2
+	// Game will end when a player reaches 30 points or deck is empty
 
 	// Persist changes
 	if err := m.persistGamePlayer(game.ID, player); err != nil {
@@ -300,7 +313,6 @@ func (m *Manager) StartGame(roomCode string, playerID uuid.UUID) error {
 
 	// Initialize game
 	game.Status = models.GameStatusInProgress
-	game.MaxRounds = len(game.Players) * 2
 
 	// Deal cards to players
 	m.dealCards(game)
@@ -365,10 +377,11 @@ func (m *Manager) SubmitClue(roomCode string, playerID uuid.UUID, clue string, c
 	game.CurrentRound.StorytellerCard = cardID
 	game.CurrentRound.Status = models.RoundStatusSubmitting
 
-	// Remove card from storyteller's hand
+	// Remove card from storyteller's hand and add to used cards
 	for i, handCard := range player.Hand {
 		if handCard == cardID {
 			player.Hand = append(player.Hand[:i], player.Hand[i+1:]...)
+			game.UsedCards = append(game.UsedCards, cardID)
 			break
 		}
 	}
@@ -431,10 +444,11 @@ func (m *Manager) SubmitCard(roomCode string, playerID uuid.UUID, cardID int) er
 		CardID:   cardID,
 	}
 
-	// Remove card from player's hand
+	// Remove card from player's hand and add to used cards
 	for i, handCard := range player.Hand {
 		if handCard == cardID {
 			player.Hand = append(player.Hand[:i], player.Hand[i+1:]...)
+			game.UsedCards = append(game.UsedCards, cardID)
 			break
 		}
 	}
@@ -538,13 +552,36 @@ func (m *Manager) GetActiveGamesCount() int {
 }
 
 func (m *Manager) dealCards(game *GameState) {
-	// Simple card dealing - in a real implementation, you'd have a proper deck
-	cardID := 1
+	// Deal 6 cards to each player from the deck
 	for _, player := range game.Players {
-		player.Hand = make([]int, 6) // Each player gets 6 cards
-		for i := 0; i < 6; i++ {
-			player.Hand[i] = cardID
-			cardID++
+		player.Hand = make([]int, 0, 6) // Each player gets 6 cards
+		for i := 0; i < 6 && len(game.Deck) > 0; i++ {
+			// Take card from top of deck
+			cardID := game.Deck[0]
+			game.Deck = game.Deck[1:]
+			player.Hand = append(player.Hand, cardID)
+		}
+	}
+}
+
+// drawCard draws one card from the deck for a player
+func (m *Manager) drawCard(game *GameState, player *Player) bool {
+	if len(game.Deck) == 0 {
+		return false // No cards left to draw
+	}
+	
+	// Take card from top of deck
+	cardID := game.Deck[0]
+	game.Deck = game.Deck[1:]
+	player.Hand = append(player.Hand, cardID)
+	return true
+}
+
+// refillHands draws cards for all players back to 6 cards
+func (m *Manager) refillHands(game *GameState) {
+	for _, player := range game.Players {
+		for len(player.Hand) < 6 && len(game.Deck) > 0 {
+			m.drawCard(game, player)
 		}
 	}
 }
@@ -648,8 +685,51 @@ func (m *Manager) completeRound(game *GameState) {
 		RevealedCards: game.CurrentRound.RevealedCards,
 	})
 
-	// Check if game is complete
-	if game.RoundNumber >= game.MaxRounds {
+	// Check if game should end according to Dixit rules:
+	// 1. Any player reaches 30 points
+	// 2. Deck is empty (no more cards to draw)
+	shouldEnd := false
+	var endReason string
+	
+	// Check for 30 points
+	for _, player := range game.Players {
+		if player.Score >= 30 {
+			shouldEnd = true
+			endReason = fmt.Sprintf("Game ended: %s reached 30 points!", player.Name)
+			break
+		}
+	}
+	
+	// Check if deck is empty (can't refill hands)
+	if !shouldEnd {
+		// Try to refill hands - if any player can't get cards, game ends
+		initialDeckSize := len(game.Deck)
+		m.refillHands(game)
+		
+		// If deck is empty and any player has less than 6 cards, game ends
+		if len(game.Deck) == 0 {
+			for _, player := range game.Players {
+				if len(player.Hand) < 6 {
+					shouldEnd = true
+					endReason = "Game ended: No more cards in deck!"
+					break
+				}
+			}
+		}
+		
+		// Log deck status
+		if initialDeckSize != len(game.Deck) {
+			logger.Info("Cards drawn after round", 
+				"room_code", game.RoomCode,
+				"round", game.RoundNumber,
+				"cards_drawn", initialDeckSize-len(game.Deck),
+				"cards_remaining", len(game.Deck))
+		}
+	}
+	
+	if shouldEnd {
+		// Send end reason message
+		m.SendSystemMessage(game.RoomCode, endReason)
 		m.completeGame(game)
 	} else {
 		// Start next round after a delay
@@ -717,6 +797,7 @@ func (m *Manager) completeGame(game *GameState) {
 
 	// Find winner (highest score)
 	var winnerID uuid.UUID
+	var winnerName string
 	highestScore := -1
 	finalScores := make(map[uuid.UUID]int)
 
@@ -725,8 +806,18 @@ func (m *Manager) completeGame(game *GameState) {
 		if player.Score > highestScore {
 			highestScore = player.Score
 			winnerID = playerID
+			winnerName = player.Name
 		}
 	}
+	
+	// Log game completion stats
+	logger.Info("Game completed",
+		"room_code", game.RoomCode,
+		"rounds_played", game.RoundNumber,
+		"winner", winnerName,
+		"winning_score", highestScore,
+		"cards_remaining", len(game.Deck),
+		"cards_used", len(game.UsedCards))
 
 	// Persist game completion
 	if err := m.persistGameCompletion(game.ID, winnerID); err != nil {

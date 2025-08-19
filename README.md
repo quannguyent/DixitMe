@@ -40,19 +40,30 @@ A full-stack implementation of the popular Dixit card game with real-time multip
 
 ### Setup
 - 3-6 players per game
-- Each player gets 6 cards from the Dixit deck
-- Game lasts for 2 rounds per player (storyteller rotates)
+- Each player gets 6 cards from the Dixit deck (84 cards total)
+- Game continues until ending conditions are met
 
 ### Round Flow
 1. **Storytelling**: Storyteller picks a card and gives a clue
 2. **Submission**: Other players submit cards that fit the clue
 3. **Voting**: Players vote for the storyteller's card among shuffled submissions
 4. **Scoring**: Points awarded based on voting results
+5. **Card Draw**: Players draw new cards to refill hands to 6 cards
 
 ### Scoring Rules
 - If all or no players guess correctly: Storyteller gets 0 points, others get 2
 - Otherwise: Storyteller + correct guessers get 3 points
 - Players get 1 additional point for each vote their card receives (except storyteller's card)
+
+### Game Ending
+The game ends when either:
+- **A player reaches 30 points** - First to 30 wins!
+- **The deck runs out of cards** - Player with highest score wins
+
+### Card Management
+- Cards played during rounds are moved to discard pile
+- Players automatically draw new cards after each round
+- Game tracks remaining deck size and used cards
 
 ## Installation & Setup
 

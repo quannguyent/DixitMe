@@ -19,6 +19,8 @@ type GameState struct {
 	Status       models.GameStatus     `json:"status"`
 	RoundNumber  int                   `json:"round_number"`
 	MaxRounds    int                   `json:"max_rounds"`
+	Deck         []int                 `json:"deck"`           // Remaining cards in deck
+	UsedCards    []int                 `json:"used_cards"`     // Cards that have been played
 	CreatedAt    time.Time             `json:"created_at"`
 	LastActivity time.Time             `json:"last_activity"`
 	mu           sync.RWMutex          `json:"-"`
