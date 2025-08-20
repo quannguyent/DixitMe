@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { useGameStore } from '../store/gameStore';
 import { useAuthStore } from '../store/authStore';
 import UserInfo from './UserInfo';
+import Chat from './Chat';
 import styles from './Lobby.module.css';
 
 const Lobby: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'join' | 'create'>('join');
   const [roomCode, setRoomCode] = useState('');
   const [playerName, setPlayerName] = useState('');
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   const { user } = useAuthStore();
 
@@ -276,6 +278,12 @@ const Lobby: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* Chat Component */}
+      <Chat 
+        isOpen={isChatOpen} 
+        onToggle={() => setIsChatOpen(!isChatOpen)} 
+      />
     </div>
   );
 };

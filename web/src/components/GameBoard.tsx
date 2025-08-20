@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useGameStore } from '../store/gameStore';
 import PlayerHand from './PlayerHand';
 import VotingPhase from './VotingPhase';
+import Chat from './Chat';
+import GamePhaseIndicator from './GamePhaseIndicator';
 
 const GameBoard: React.FC = () => {
   const {
@@ -16,6 +18,7 @@ const GameBoard: React.FC = () => {
   const [selectedCard, setSelectedCard] = useState<number | null>(null);
   const [clueText, setClueText] = useState('');
   const [showClueForm, setShowClueForm] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
 
   useEffect(() => {
     if (gameState?.current_round) {
@@ -125,14 +128,20 @@ const GameBoard: React.FC = () => {
         </button>
       </div>
 
-      <div className="phase-indicator">
-        <h2>{getGamePhase()}</h2>
-        {gameState.current_round?.clue && (
-          <div className="clue-display">
-            <strong>Clue:</strong> "{gameState.current_round.clue}"
-          </div>
-        )}
-      </div>
+      {/* Game Phase Indicator */}
+      {gameState.current_round && (
+        <GamePhaseIndicator
+          currentPhase={gameState.current_round.status}
+          roundNumber={gameState.round_number}
+          isStoryteller={currentPlayer.id === gameState.current_round.storyteller_id}
+        />
+      )}
+
+      {gameState.current_round?.clue && (
+        <div className="clue-display">
+          <strong>Clue:</strong> "{gameState.current_round.clue}"
+        </div>
+      )}
 
       <div className="players-section">
         <div className="players-grid">
@@ -211,6 +220,12 @@ const GameBoard: React.FC = () => {
         canSelect={showClueForm || canSubmitCard()}
         canSubmit={canSubmitCard()}
         onSubmit={handleSubmitCard}
+      />
+
+      {/* Chat Component */}
+      <Chat 
+        isOpen={isChatOpen} 
+        onToggle={() => setIsChatOpen(!isChatOpen)} 
       />
     </div>
   );

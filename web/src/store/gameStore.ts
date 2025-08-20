@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
-import { GameState, Player, Card, GameMessage, MessageTypes } from '../types/game';
+import { GameState, Player, Card, GameMessage, MessageTypes, ChatMessage } from '../types/game';
 
 interface GameStore {
   // Connection state
@@ -13,6 +13,9 @@ interface GameStore {
   gameState: GameState | null;
   currentPlayer: Player | null;
   cards: Card[];
+  
+  // Chat state
+  chatMessages: ChatMessage[];
   
   // UI state
   isLoading: boolean;
@@ -30,7 +33,11 @@ interface GameStore {
   submitCard: (roomCode: string, cardId: number) => void;
   submitVote: (roomCode: string, cardId: number) => void;
   leaveGame: (roomCode: string) => void;
+  sendChatMessage: (roomCode: string, message: string, messageType?: string) => void;
+  getChatHistory: (roomCode: string, phase?: string, limit?: number) => void;
   setGameState: (gameState: GameState) => void;
+  setChatMessages: (messages: ChatMessage[]) => void;
+  addChatMessage: (message: ChatMessage) => void;
   setCards: (cards: Card[]) => void;
   setError: (error: string | null) => void;
   setLoading: (loading: boolean) => void;
@@ -51,6 +58,7 @@ export const useGameStore = create<GameStore>()(
       gameState: null,
       currentPlayer: null,
       cards: [],
+      chatMessages: [],
       isLoading: false,
       error: null,
 
@@ -285,6 +293,48 @@ export const useGameStore = create<GameStore>()(
       setLoading: (isLoading) => {
         set({ isLoading }, false, 'set-loading');
       },
+
+      sendChatMessage: (roomCode, message, messageType = 'chat') => {
+        const state = get();
+        if (!state.socket || !state.isConnected) return;
+
+        const chatMessage = {
+          type: MessageTypes.SEND_CHAT,
+          payload: {
+            room_code: roomCode,
+            message: message.trim(),
+            message_type: messageType
+          }
+        };
+
+        state.socket.send(JSON.stringify(chatMessage));
+      },
+
+      getChatHistory: (roomCode, phase = 'all', limit = 50) => {
+        const state = get();
+        if (!state.socket || !state.isConnected) return;
+
+        const message = {
+          type: MessageTypes.GET_CHAT_HISTORY,
+          payload: {
+            room_code: roomCode,
+            phase,
+            limit
+          }
+        };
+
+        state.socket.send(JSON.stringify(message));
+      },
+
+      setChatMessages: (messages) => {
+        set({ chatMessages: messages }, false, 'set-chat-messages');
+      },
+
+      addChatMessage: (message) => {
+        const state = get();
+        const newMessages = [...state.chatMessages, message];
+        set({ chatMessages: newMessages }, false, 'add-chat-message');
+      },
     }),
     {
       name: 'game-store',
@@ -325,6 +375,16 @@ function handleWebSocketMessage(
       } else {
         set({ error: errorMessage, isLoading: false }, false, 'websocket-error');
       }
+      break;
+
+    case MessageTypes.CHAT_MESSAGE:
+      const chatMessage = message.payload as ChatMessage;
+      get().addChatMessage(chatMessage);
+      break;
+
+    case MessageTypes.CHAT_HISTORY:
+      const { messages } = message.payload;
+      get().setChatMessages(messages || []);
       break;
 
     case MessageTypes.PLAYER_JOINED:

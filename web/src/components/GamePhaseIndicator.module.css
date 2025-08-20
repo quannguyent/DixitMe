@@ -1,0 +1,358 @@
+/* Main Phase Indicator Container */
+.phaseIndicator {
+  background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+  border: 1px solid #cbd5e1;
+  border-radius: 16px;
+  padding: 20px;
+  margin: 16px 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.phaseIndicator::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+}
+
+/* Header Section */
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.roundInfo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.roundLabel {
+  font-size: 0.9rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.roundNumber {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-weight: 600;
+  font-size: 1.1rem;
+  padding: 6px 12px;
+  border-radius: 20px;
+  min-width: 40px;
+  text-align: center;
+}
+
+.roleIndicator {
+  display: flex;
+  align-items: center;
+}
+
+.role {
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.storyteller {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  color: white;
+}
+
+.player {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+/* Current Phase Display */
+.currentPhase {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: white;
+  padding: 16px;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  border: 1px solid #e2e8f0;
+}
+
+.phaseIcon {
+  font-size: 2.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 60px;
+  height: 60px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 50%;
+  filter: drop-shadow(0 4px 8px rgba(102, 126, 234, 0.3));
+}
+
+.phaseInfo {
+  flex: 1;
+}
+
+.phaseName {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 4px;
+}
+
+.phaseDescription {
+  font-size: 0.95rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+/* Progress Bar */
+.progressBar {
+  height: 6px;
+  background: #e2e8f0;
+  border-radius: 3px;
+  margin: 16px 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.progressFill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+  border-radius: 3px;
+  transition: width 0.6s ease;
+  position: relative;
+}
+
+.progressFill::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.3) 50%, transparent 100%);
+  animation: shimmer 2s infinite;
+}
+
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Phases List */
+.phasesList {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 20px 0;
+  position: relative;
+}
+
+.phaseStep {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  flex: 1;
+  max-width: 120px;
+}
+
+.stepIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  border: 3px solid #e2e8f0;
+  background: white;
+  transition: all 0.3s ease;
+  position: relative;
+  z-index: 2;
+}
+
+.stepName {
+  font-size: 0.8rem;
+  font-weight: 600;
+  text-align: center;
+  color: #64748b;
+  transition: color 0.3s ease;
+}
+
+/* Phase Step States */
+.phaseStep.pending .stepIcon {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.phaseStep.active .stepIcon {
+  border-color: #667eea;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.phaseStep.active .stepName {
+  color: #667eea;
+  font-weight: 700;
+}
+
+.phaseStep.completed .stepIcon {
+  border-color: #10b981;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+.phaseStep.completed .stepName {
+  color: #10b981;
+}
+
+/* Connectors between steps */
+.connector {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  width: 100%;
+  height: 3px;
+  background: #e2e8f0;
+  z-index: 1;
+  transition: background 0.3s ease;
+}
+
+.connectorCompleted {
+  background: linear-gradient(90deg, #10b981 0%, #059669 100%);
+}
+
+/* Tips Section */
+.tips {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  padding: 12px 16px;
+  border-radius: 8px;
+  border: 1px solid #f59e0b;
+  font-size: 0.9rem;
+  color: #92400e;
+  line-height: 1.4;
+}
+
+.tipIcon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .phaseIndicator {
+    padding: 16px;
+    margin: 12px 0;
+  }
+
+  .header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: stretch;
+  }
+
+  .currentPhase {
+    flex-direction: column;
+    text-align: center;
+    gap: 12px;
+  }
+
+  .phaseIcon {
+    width: 50px;
+    height: 50px;
+    font-size: 2rem;
+    align-self: center;
+  }
+
+  .phaseName {
+    font-size: 1.2rem;
+  }
+
+  .phaseDescription {
+    font-size: 0.9rem;
+  }
+
+  .phasesList {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .phaseStep {
+    max-width: none;
+    min-width: 80px;
+  }
+
+  .stepIcon {
+    width: 35px;
+    height: 35px;
+    font-size: 1rem;
+  }
+
+  .stepName {
+    font-size: 0.75rem;
+  }
+
+  .connector {
+    display: none; /* Hide connectors on mobile for cleaner look */
+  }
+}
+
+@media (max-width: 480px) {
+  .phasesList {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+  }
+
+  .phaseStep {
+    flex-direction: row;
+    gap: 8px;
+    justify-content: flex-start;
+  }
+
+  .tip {
+    flex-direction: column;
+    text-align: center;
+    gap: 6px;
+  }
+}
+
+/* Animation for phase transitions */
+.phaseIndicator {
+  animation: slideIn 0.5s ease;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

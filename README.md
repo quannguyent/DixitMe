@@ -33,7 +33,7 @@ A full-stack implementation of the popular Dixit card game with real-time multip
 ### Frontend (React)
 - **Framework**: React 18 with TypeScript
 - **State Management**: Zustand for game state
-- **Styling**: CSS-in-JS with responsive design
+- **Styling**: CSS Modules with responsive design
 - **WebSocket Client**: Native WebSocket API with reconnection logic
 
 ## Game Rules
@@ -192,34 +192,97 @@ The game ends when either:
 - `round_completed` - Round results with scores
 - `game_completed` - Final game results
 
-## Project Structure
+## 📁 Project Structure
 
 ```
 DixitMe/
-├── cmd/                    # Command-line applications
-│   ├── server/             # Main server application
-│   └── seed/               # Database seeding tool
-├── internal/               # Backend Go modules
-│   ├── auth/               # Authentication system
-│   ├── bot/                # AI bot players
-│   ├── config/             # Configuration management
-│   ├── database/           # Database setup
-│   ├── game/               # Game logic & state management
-│   ├── handlers/           # HTTP API handlers
-│   ├── logger/             # Structured logging
-│   ├── models/             # Database models
-│   ├── redis/              # Redis client
-│   ├── seeder/             # Database seeding
-│   ├── storage/            # File storage (MinIO)
-│   └── websocket/          # WebSocket communication
-├── web/                    # React frontend
-│   ├── src/components/     # React components
-│   ├── src/store/          # Zustand state management
-│   └── src/types/          # TypeScript definitions
-├── assets/cards/           # Card images
-├── scripts/                # Utility scripts
-└── docs/                   # API documentation
+├── cmd/                    # 🚀 Command-line applications
+│   ├── server/             #     → Main server application (simplified)
+│   └── seed/               #     → Database seeding tool (CLI)
+├── internal/               # 🔒 Backend Go modules (private packages)
+│   ├── auth/               #     → Authentication & JWT system
+│   │   ├── handlers.go     #         ┣ HTTP endpoints (login, register, Google SSO)
+│   │   └── service.go      #         ┗ Business logic & token management
+│   ├── bot/                #     → AI bot players with heuristic algorithms
+│   │   └── ai.go           #         ┗ Difficulty-based clue generation
+│   ├── config/             #     → Configuration management
+│   │   └── config.go       #         ┗ Environment variable loading
+│   ├── database/           #     → Database connection & migrations
+│   │   └── database.go     #         ┗ PostgreSQL setup with GORM
+│   ├── game/               #     → 🎮 Core game logic
+│   │   ├── manager.go      #         ┣ Main game manager singleton
+│   │   ├── game_actions.go #         ┣ Game lifecycle: create, join, start
+│   │   ├── round_actions.go#         ┣ Round management & gameplay
+│   │   ├── bot_actions.go  #         ┣ Bot AI integration
+│   │   ├── chat_actions.go #         ┣ Real-time chat system
+│   │   ├── persistence.go  #         ┣ Database operations
+│   │   ├── cleanup.go      #         ┣ Inactive game cleanup service
+│   │   ├── broadcasting.go #         ┣ WebSocket message broadcasting
+│   │   ├── interfaces.go   #         ┣ Clean interfaces for testing
+│   │   └── types.go        #         ┗ Game state & message type definitions
+│   ├── handlers/           #     → HTTP API endpoints
+│   │   └── handlers.go     #         ┗ REST API for games, players, statistics
+│   ├── logger/             #     → Structured logging
+│   │   └── logger.go       #         ┗ slog configuration (JSON/text formats)
+│   ├── middleware/         #     → HTTP middleware
+│   │   └── cors.go         #         ┗ CORS configuration
+│   ├── models/             #     → 📊 Database models
+│   │   ├── models.go       #         ┣ Package documentation & exports
+│   │   ├── user.go         #         ┣ User accounts & authentication
+│   │   ├── player.go       #         ┣ Player entities & game participation
+│   │   ├── game.go         #         ┣ Game sessions & game history
+│   │   ├── round.go        #         ┣ Game rounds, submissions & votes
+│   │   ├── card.go         #         ┣ Card entities & tag system
+│   │   └── chat.go         #         ┗ Chat messages & communication
+│   ├── redis/              #     → Redis cache integration
+│   │   └── redis.go        #         ┗ Redis client setup
+│   ├── router/             #     → 🛣️ HTTP routing & middleware (NEW)
+│   │   └── router.go       #         ┗ Organized route definitions
+│   ├── seeder/             #     → Database seeding logic
+│   ├── storage/            #     → File storage (MinIO object storage)
+│   └── websocket/          #     → WebSocket communication
+│       └── hub.go          #         ┗ Connection management & message routing
+├── web/                    # ⚛️ React frontend (TypeScript + CSS Modules)
+│   ├── src/components/     #     → React UI components (12 files)
+│   │   ├── Auth.tsx        #         ┣ Authentication modal (login/register/guest)
+│   │   ├── Card.tsx        #         ┣ Individual card display with animations
+│   │   ├── Chat.tsx        #         ┣ Real-time chat with emoji picker
+│   │   ├── GameBoard.tsx   #         ┣ Main game interface during play
+│   │   ├── GameLanding.tsx #         ┣ Primary landing page (join/create)
+│   │   ├── GamePhaseIndicator.tsx #  ┣ Visual game phase tracker
+│   │   ├── Lobby.tsx       #         ┣ Game lobby for waiting players
+│   │   ├── PlayerHand.tsx  #         ┣ Player's card hand interface
+│   │   ├── UserInfo.tsx    #         ┣ User profile & guest upgrade
+│   │   ├── VotingPhase.tsx #         ┣ Voting interface for cards
+│   │   └── *.module.css    #         ┗ CSS Modules for each component
+│   ├── src/store/          #     → State management (Zustand)
+│   │   ├── authStore.ts    #         ┣ 🔑 Authentication state & actions
+│   │   └── gameStore.ts    #         ┗ Game state, WebSocket & actions
+│   ├── src/types/          #     → TypeScript definitions
+│   │   └── game.ts         #         ┗ 📝 Game interfaces & message types
+│   ├── App.tsx             #     → 🎪 Main app with routing logic
+│   ├── index.tsx           #     → ⚡ React entry point
+│   └── index.css           #     → 🎨 Global styles
+├── assets/                 # 🎨 Static game assets
+│   ├── cards/              #     → Card image files (84 Dixit cards)
+│   └── tags.json           #     → Card categorization tags for bot AI
+├── scripts/                # 🔧 Utility scripts
+│   └── generate-swagger.sh #     → API documentation generation
+├── docs/                   # 📚 Auto-generated API documentation
+│   └── swagger files       #     → OpenAPI 2.0 specification
+├── config.env.example      # ⚙️ Environment configuration template
+├── go.mod / go.sum         # 📦 Go dependency management
+└── README.md               # 📖 Project documentation
 ```
+
+### 🏗️ Architecture Highlights
+- **🔄 Real-time Communication**: WebSocket-based with automatic reconnection
+- **🎯 Game State Management**: In-memory with database persistence snapshots  
+- **🤖 AI Bot System**: Heuristic algorithms with card categorization
+- **🔐 Flexible Authentication**: JWT + Google SSO + Guest sessions
+- **📱 Responsive Design**: Mobile-first React components with CSS Modules
+- **🧪 Clean Separation**: Modular Go packages, interface-driven design
+- **⚡ Performance**: Redis caching, connection pooling, optimized queries
 
 ## Development
 

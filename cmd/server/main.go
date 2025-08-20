@@ -17,16 +17,13 @@ import (
 	"dixitme/internal/bot"
 	"dixitme/internal/config"
 	"dixitme/internal/database"
-	"dixitme/internal/handlers"
 	"dixitme/internal/logger"
 	"dixitme/internal/redis"
+	"dixitme/internal/router"
 	"dixitme/internal/seeder"
 	"dixitme/internal/storage"
-	websocketHandler "dixitme/internal/websocket"
 
 	"github.com/gin-gonic/gin"
-	swaggerFiles "github.com/swaggo/files"
-	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
 func main() {
@@ -68,119 +65,12 @@ func main() {
 	authService := auth.NewAuthService(jwtService)
 	authHandlers := auth.NewAuthHandlers(authService, jwtService, cfg.Auth.EnableSSO)
 
-	// Create Gin router (without default logger)
-	r := gin.New()
-
-	// Add recovery middleware
-	r.Use(gin.Recovery())
-
-	// Add our custom logger middleware
-	r.Use(logger.GinLogger())
-
-	// Add CORS middleware
-	r.Use(handlers.CORSMiddleware())
-
-	// Swagger documentation endpoint
-	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
-
-	// Health check endpoint
-	r.GET("/health", handlers.HealthCheck)
-
-	// API routes
-	api := r.Group("/api/v1")
-	{
-		// Authentication routes (public)
-		authGroup := api.Group("/auth")
-		{
-			authGroup.POST("/register", authHandlers.Register)
-			authGroup.POST("/login", authHandlers.Login)
-			authGroup.POST("/google", authHandlers.GoogleLogin)
-			authGroup.POST("/guest", authHandlers.GuestLogin)
-			authGroup.POST("/refresh", authHandlers.RefreshToken)
-			authGroup.GET("/status", authHandlers.GetAuthStatus)
-
-			// Protected auth routes
-			authGroup.POST("/logout", auth.RequireAuth(jwtService), authHandlers.Logout)
-			authGroup.GET("/me", auth.RequireAuth(jwtService), authHandlers.GetCurrentUser)
-			authGroup.GET("/validate", auth.RequireAuth(jwtService), authHandlers.ValidateToken)
-		}
-
-		// Player routes (allow both auth and guest)
-		playerGroup := api.Group("/players")
-		playerGroup.Use(auth.GuestOrAuth(jwtService))
-		{
-			playerGroup.POST("", handlers.CreatePlayer)
-			playerGroup.GET("/:id", handlers.GetPlayer)
-		}
-
-		// Player stats routes (separate to avoid route conflicts)
-		playerStatsGroup := api.Group("/player")
-		playerStatsGroup.Use(auth.GuestOrAuth(jwtService))
-		{
-			playerStatsGroup.GET("/:player_id/stats", handlers.GetPlayerStats)
-			playerStatsGroup.GET("/:player_id/history", handlers.GetGameHistory)
-		}
-
-		// Game routes (allow both auth and guest)
-		gameGroup := api.Group("/games")
-		gameGroup.Use(auth.GuestOrAuth(jwtService))
-		{
-			gameGroup.GET("", handlers.GetGames)
-			gameGroup.GET("/:room_code", handlers.GetGame)
-			gameGroup.POST("/add-bot", handlers.AddBotToGame)
-		}
-
-		// Card management routes (require auth for modifications, allow guest for reading)
-		cardsGroup := api.Group("/cards")
-		{
-			cardsGroup.GET("", handlers.ListCards)                                                     // Public
-			cardsGroup.GET("/legacy", handlers.GetCards)                                               // Public
-			cardsGroup.GET("/:card_id", handlers.GetCardWithTags)                                      // Public
-			cardsGroup.POST("", auth.RequireAuth(jwtService), handlers.CreateCard)                     // Auth required
-			cardsGroup.POST("/:card_id/image", auth.RequireAuth(jwtService), handlers.UploadCardImage) // Auth required
-		}
-
-		// Tag management routes
-		tagsGroup := api.Group("/tags")
-		{
-			tagsGroup.GET("", handlers.ListTags)                                 // Public
-			tagsGroup.POST("", auth.RequireAuth(jwtService), handlers.CreateTag) // Auth required
-		}
-
-		// Bot management routes
-		botGroup := api.Group("/bots")
-		{
-			botGroup.GET("/stats", handlers.GetBotStats) // Public
-		}
-
-		// Admin routes (require auth)
-		adminGroup := api.Group("/admin")
-		adminGroup.Use(auth.RequireAuth(jwtService)) // All admin routes require auth
-		{
-			adminGroup.POST("/seed", handlers.SeedDatabase)
-			adminGroup.POST("/seed/tags", handlers.SeedTags)
-			adminGroup.POST("/seed/cards", handlers.SeedCards)
-			adminGroup.GET("/stats", handlers.GetDatabaseStats)
-			adminGroup.POST("/cleanup", handlers.CleanupOldGames)
-		}
-
-		// Chat routes (require session - guest or auth)
-		chatGroup := api.Group("/chat")
-		chatGroup.Use(auth.GuestOrAuth(jwtService))
-		{
-			chatGroup.POST("/send", handlers.SendChatMessage)
-			chatGroup.GET("/history", handlers.GetChatHistory)
-			chatGroup.GET("/stats", handlers.GetChatStats)
-		}
+	// Setup router with dependencies
+	routerDeps := &router.RouterDependencies{
+		AuthHandlers: authHandlers,
+		JWTService:   jwtService,
 	}
-
-	// WebSocket endpoint (with optional authentication)
-	r.GET("/ws", websocketHandler.HandleWebSocketWithAuth(jwtService))
-
-	// Serve static files (for card images in development)
-	r.Static("/cards", "./assets/cards")
-	r.Static("/static", "./web/build/static")
-	r.StaticFile("/", "./web/build/index.html")
+	r := router.SetupRouter(routerDeps)
 
 	log.Info("Server starting", "port", cfg.Port, "gin_mode", cfg.GinMode)
 	if err := r.Run(":" + cfg.Port); err != nil {
