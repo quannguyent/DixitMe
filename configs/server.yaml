@@ -1,0 +1,57 @@
+# Server configuration for DixitMe application
+server:
+  port: 8080
+  gin_mode: debug # debug, release, test
+  read_timeout: 30s
+  write_timeout: 30s
+  max_header_bytes: 1048576 # 1MB
+
+# Database configuration
+database:
+  max_open_conns: 25
+  max_idle_conns: 5
+  conn_max_lifetime: 300s # 5 minutes
+  
+# Redis configuration  
+redis:
+  pool_size: 10
+  min_idle_conns: 5
+  dial_timeout: 5s
+  read_timeout: 3s
+  write_timeout: 3s
+
+# Game configuration
+game:
+  max_players_per_game: 6
+  min_players_per_game: 3
+  max_rounds: 999
+  cleanup_interval: 60s # How often to check for inactive games
+  empty_game_timeout: 600s # 10 minutes
+  occupied_game_timeout: 1800s # 30 minutes
+  cards_per_player: 6
+
+# JWT configuration
+jwt:
+  token_expiry: 24h
+  refresh_expiry: 168h # 7 days
+
+# Bot configuration
+bot:
+  response_delay_min: 2s
+  response_delay_max: 8s
+  difficulty_levels:
+    easy: 1
+    medium: 2  
+    hard: 3
+
+# Chat configuration
+chat:
+  max_message_length: 500
+  history_limit: 100
+  rate_limit_messages: 10
+  rate_limit_window: 60s
+
+# File upload limits
+upload:
+  max_file_size: 5242880 # 5MB
+  allowed_extensions: [".jpg", ".jpeg", ".png", ".gif"]

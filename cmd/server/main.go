@@ -13,67 +13,37 @@ package main
 
 import (
 	_ "dixitme/docs" // Import docs for swagger
-	"dixitme/internal/auth"
-	"dixitme/internal/bot"
-	"dixitme/internal/config"
-	"dixitme/internal/database"
+	"dixitme/internal/app"
 	"dixitme/internal/logger"
-	"dixitme/internal/redis"
-	"dixitme/internal/router"
-	"dixitme/internal/seeder"
-	"dixitme/internal/storage"
-
-	"github.com/gin-gonic/gin"
+	"os"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
-	// Load configuration
-	cfg := config.Load()
-
-	// Initialize logger
-	logger.InitLogger(cfg.Logger)
-	log := logger.GetLogger()
-
-	log.Info("Starting DixitMe server", "version", "1.0")
-
-	// Set Gin mode
-	gin.SetMode(cfg.GinMode)
-
-	// Initialize database
-	database.Initialize(cfg.DatabaseURL)
-
-	// Initialize Redis
-	redis.Initialize(cfg.RedisURL)
-
-	// Initialize MinIO storage
-	if err := storage.Initialize(cfg.MinIO); err != nil {
-		log.Error("Failed to initialize MinIO", "error", err)
-		// Continue without MinIO - fallback to local storage
+	// Create and initialize the application
+	application, err := app.NewApp()
+	if err != nil {
+		log := logger.GetLogger()
+		log.Error("Failed to initialize application", "error", err)
+		os.Exit(1)
 	}
 
-	// Initialize bot system
-	bot.Initialize()
+	// Setup graceful shutdown
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 
-	// Seed database with default data
-	if err := seeder.SeedDatabase(); err != nil {
-		log.Error("Failed to seed database", "error", err)
-		// Continue without seeding - not critical for startup
-	}
+	go func() {
+		<-c
+		application.Cleanup()
+		os.Exit(0)
+	}()
 
-	// Initialize authentication services
-	jwtService := auth.NewJWTService(cfg.Auth.JWTSecret)
-	authService := auth.NewAuthService(jwtService)
-	authHandlers := auth.NewAuthHandlers(authService, jwtService, cfg.Auth.EnableSSO)
-
-	// Setup router with dependencies
-	routerDeps := &router.RouterDependencies{
-		AuthHandlers: authHandlers,
-		JWTService:   jwtService,
-	}
-	r := router.SetupRouter(routerDeps)
-
-	log.Info("Server starting", "port", cfg.Port, "gin_mode", cfg.GinMode)
-	if err := r.Run(":" + cfg.Port); err != nil {
+	// Start the server
+	if err := application.Run(); err != nil {
+		log := logger.GetLogger()
 		log.Error("Failed to start server", "error", err)
+		application.Cleanup()
+		os.Exit(1)
 	}
 }

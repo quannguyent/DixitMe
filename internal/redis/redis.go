@@ -35,3 +35,10 @@ func Initialize(redisURL string) {
 func GetClient() *redis.Client {
 	return Client
 }
+
+// Close closes the Redis connection
+func Close() {
+	if Client != nil {
+		Client.Close()
+	}
+}

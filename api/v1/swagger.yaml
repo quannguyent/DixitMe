@@ -1,0 +1,488 @@
+basePath: /api/v1
+definitions:
+  handlers.CreatePlayerRequest:
+    properties:
+      name:
+        type: string
+    required:
+    - name
+    type: object
+  handlers.CreatePlayerResponse:
+    properties:
+      player:
+        $ref: '#/definitions/models.Player'
+    type: object
+  handlers.GetGameResponse:
+    properties:
+      game:
+        $ref: '#/definitions/models.Game'
+      is_live:
+        type: boolean
+    type: object
+  handlers.GetGamesResponse:
+    properties:
+      games:
+        items:
+          $ref: '#/definitions/models.Game'
+        type: array
+    type: object
+  models.CardSubmission:
+    properties:
+      card_id:
+        description: ID of the card from the deck
+        type: integer
+      id:
+        type: string
+      player:
+        $ref: '#/definitions/models.Player'
+      player_id:
+        type: string
+      round:
+        allOf:
+        - $ref: '#/definitions/models.GameRound'
+        description: Relationships
+      round_id:
+        type: string
+    type: object
+  models.Game:
+    properties:
+      created_at:
+        type: string
+      current_round:
+        type: integer
+      id:
+        type: string
+      max_rounds:
+        description: 3 players * 2 rounds each
+        type: integer
+      players:
+        description: Relationships
+        items:
+          $ref: '#/definitions/models.GamePlayer'
+        type: array
+      room_code:
+        type: string
+      rounds:
+        items:
+          $ref: '#/definitions/models.GameRound'
+        type: array
+      status:
+        $ref: '#/definitions/models.GameStatus'
+      updated_at:
+        type: string
+    type: object
+  models.GameHistory:
+    properties:
+      created_at:
+        type: string
+      duration:
+        description: Duration in minutes
+        type: integer
+      game:
+        allOf:
+        - $ref: '#/definitions/models.Game'
+        description: Relationships
+      game_id:
+        type: string
+      id:
+        type: string
+      total_rounds:
+        type: integer
+      winner:
+        $ref: '#/definitions/models.Player'
+      winner_id:
+        type: string
+    type: object
+  models.GamePlayer:
+    properties:
+      game:
+        allOf:
+        - $ref: '#/definitions/models.Game'
+        description: Relationships
+      game_id:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      player:
+        $ref: '#/definitions/models.Player'
+      player_id:
+        type: string
+      position:
+        description: Turn order
+        type: integer
+      score:
+        type: integer
+    type: object
+  models.GameRound:
+    properties:
+      clue:
+        type: string
+      created_at:
+        type: string
+      game:
+        allOf:
+        - $ref: '#/definitions/models.Game'
+        description: Relationships
+      game_id:
+        type: string
+      id:
+        type: string
+      round_number:
+        type: integer
+      status:
+        $ref: '#/definitions/models.RoundStatus'
+      storyteller:
+        $ref: '#/definitions/models.Player'
+      storyteller_card:
+        description: Card ID chosen by storyteller
+        type: integer
+      storyteller_id:
+        type: string
+      submissions:
+        items:
+          $ref: '#/definitions/models.CardSubmission'
+        type: array
+      updated_at:
+        type: string
+      votes:
+        items:
+          $ref: '#/definitions/models.Vote'
+        type: array
+    type: object
+  models.GameStatus:
+    enum:
+    - waiting
+    - in_progress
+    - completed
+    - abandoned
+    type: string
+    x-enum-varnames:
+    - GameStatusWaiting
+    - GameStatusInProgress
+    - GameStatusCompleted
+    - GameStatusAbandoned
+  models.Player:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.RoundStatus:
+    enum:
+    - storytelling
+    - submitting
+    - voting
+    - scoring
+    - completed
+    type: string
+    x-enum-varnames:
+    - RoundStatusStorytelling
+    - RoundStatusSubmitting
+    - RoundStatusVoting
+    - RoundStatusScoring
+    - RoundStatusCompleted
+  models.Vote:
+    properties:
+      card_id:
+        description: ID of the card they voted for
+        type: integer
+      id:
+        type: string
+      player:
+        $ref: '#/definitions/models.Player'
+      player_id:
+        type: string
+      round:
+        allOf:
+        - $ref: '#/definitions/models.GameRound'
+        description: Relationships
+      round_id:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: support@dixitme.com
+    name: DixitMe API Support
+  description: |-
+    API for DixitMe - Online Dixit Card Game
+    This API provides endpoints for managing players, games, and real-time gameplay through WebSocket connections.
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  title: DixitMe API
+  version: "1.0"
+paths:
+  /cards:
+    get:
+      consumes:
+      - application/json
+      description: Get the list of all available cards in the game
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              items:
+                additionalProperties: true
+                type: object
+              type: array
+            type: object
+      summary: Get available cards
+      tags:
+      - cards
+  /games:
+    get:
+      consumes:
+      - application/json
+      description: Get a paginated list of all games with optional status filter
+      parameters:
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Items per page
+        in: query
+        name: limit
+        type: integer
+      - description: Game status filter
+        enum:
+        - waiting
+        - in_progress
+        - completed
+        - abandoned
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.GetGamesResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List all games
+      tags:
+      - games
+  /games/{room_code}:
+    get:
+      consumes:
+      - application/json
+      description: Get game information and status by room code
+      parameters:
+      - description: Room Code
+        in: path
+        name: room_code
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.GetGameResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get game by room code
+      tags:
+      - games
+  /health:
+    get:
+      consumes:
+      - application/json
+      description: Check the health status of the API and its dependencies
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Health check
+      tags:
+      - system
+  /player/{player_id}/history:
+    get:
+      consumes:
+      - application/json
+      description: Get paginated game history for a specific player
+      parameters:
+      - description: Player ID
+        format: uuid
+        in: path
+        name: player_id
+        required: true
+        type: string
+      - default: 1
+        description: Page number
+        in: query
+        name: page
+        type: integer
+      - default: 10
+        description: Items per page
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              items:
+                $ref: '#/definitions/models.GameHistory'
+              type: array
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get player game history
+      tags:
+      - players
+  /player/{player_id}/stats:
+    get:
+      consumes:
+      - application/json
+      description: Get comprehensive statistics for a specific player
+      parameters:
+      - description: Player ID
+        format: uuid
+        in: path
+        name: player_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get player statistics
+      tags:
+      - players
+  /players:
+    post:
+      consumes:
+      - application/json
+      description: Create a new player with a given name
+      parameters:
+      - description: Player information
+        in: body
+        name: player
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CreatePlayerRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.CreatePlayerResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create a new player
+      tags:
+      - players
+  /players/{id}:
+    get:
+      consumes:
+      - application/json
+      description: Get player information by player ID
+      parameters:
+      - description: Player ID
+        format: uuid
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/models.Player'
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Get player by ID
+      tags:
+      - players
+schemes:
+- http
+- https
+swagger: "2.0"
