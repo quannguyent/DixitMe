@@ -220,8 +220,16 @@ DixitMe/
 │   │   ├── broadcasting.go #         ┣ WebSocket message broadcasting
 │   │   ├── interfaces.go   #         ┣ Clean interfaces for testing
 │   │   └── types.go        #         ┗ Game state & message type definitions
-│   ├── handlers/           #     → HTTP API endpoints
-│   │   └── handlers.go     #         ┗ REST API for games, players, statistics
+│   ├── handlers/           #     → HTTP API endpoints (separated by domain)
+│   │   ├── handlers.go     #         ┣ Package documentation
+│   │   ├── common.go       #         ┣ Health checks and middleware
+│   │   ├── player.go       #         ┣ Player management and statistics
+│   │   ├── game.go         #         ┣ Game management and bot operations
+│   │   ├── card.go         #         ┣ Card management and image uploads
+│   │   ├── tag.go          #         ┣ Tag management for categorization
+│   │   ├── chat.go         #         ┣ Chat messages and communication
+│   │   ├── admin.go        #         ┣ Administrative operations
+│   │   └── types.go        #         ┗ Request/response type definitions
 │   ├── logger/             #     → Structured logging
 │   │   └── logger.go       #         ┗ slog configuration (JSON/text formats)
 │   ├── middleware/         #     → HTTP middleware
@@ -240,8 +248,12 @@ DixitMe/
 │   │   └── router.go       #         ┗ Organized route definitions
 │   ├── seeder/             #     → Database seeding logic
 │   ├── storage/            #     → File storage (MinIO object storage)
-│   └── websocket/          #     → WebSocket communication
-│       └── hub.go          #         ┗ Connection management & message routing
+│   └── websocket/          #     → WebSocket communication (organized by function)
+│       ├── hub.go          #         ┣ Package documentation
+│       ├── connection.go   #         ┣ WebSocket connection management
+│       ├── handlers.go     #         ┣ Message routing and game actions
+│       ├── auth.go         #         ┣ Authentication and token extraction
+│       └── types.go        #         ┗ Message type definitions
 ├── web/                    # ⚛️ React frontend (TypeScript + CSS Modules)
 │   ├── src/components/     #     → React UI components (12 files)
 │   │   ├── Auth.tsx        #         ┣ Authentication modal (login/register/guest)

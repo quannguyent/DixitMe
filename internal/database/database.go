@@ -54,3 +54,8 @@ func migrate() error {
 func GetDB() *gorm.DB {
 	return DB
 }
+
+// SetDB sets the database instance (used for testing)
+func SetDB(database *gorm.DB) {
+	DB = database
+}
