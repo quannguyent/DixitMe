@@ -19,7 +19,7 @@ const (
 
 // Game represents a game session
 type Game struct {
-	ID           uuid.UUID      `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	ID           uuid.UUID      `json:"id" gorm:"type:uuid;primaryKey"`
 	RoomCode     string         `json:"room_code" gorm:"unique;not null"`
 	Status       GameStatus     `json:"status" gorm:"default:'waiting'"`
 	CurrentRound int            `json:"current_round" gorm:"default:1"`
@@ -35,7 +35,7 @@ type Game struct {
 
 // GamePlayer represents a player's participation in a specific game
 type GamePlayer struct {
-	ID       uuid.UUID `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	ID       uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	GameID   uuid.UUID `json:"game_id" gorm:"type:uuid;not null"`
 	PlayerID uuid.UUID `json:"player_id" gorm:"type:uuid;not null"`
 	Score    int       `json:"score" gorm:"default:0"`
@@ -49,7 +49,7 @@ type GamePlayer struct {
 
 // GameHistory stores completed games for statistics
 type GameHistory struct {
-	ID          uuid.UUID `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	ID          uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	GameID      uuid.UUID `json:"game_id" gorm:"type:uuid;not null"`
 	WinnerID    uuid.UUID `json:"winner_id" gorm:"type:uuid"`
 	TotalRounds int       `json:"total_rounds"`

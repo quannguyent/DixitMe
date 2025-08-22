@@ -8,7 +8,7 @@ import (
 
 // ChatMessage represents a chat message in a game
 type ChatMessage struct {
-	ID          uuid.UUID `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	ID          uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	GameID      uuid.UUID `json:"game_id" gorm:"type:uuid;not null;index"`
 	PlayerID    uuid.UUID `json:"player_id" gorm:"type:uuid;not null;index"`
 	Message     string    `json:"message" gorm:"type:text;not null"`

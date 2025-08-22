@@ -1,6 +1,7 @@
 package game
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -10,6 +11,13 @@ import (
 
 	"github.com/google/uuid"
 )
+
+// ChatService defines chat-related operations
+type ChatService interface {
+	SendChatMessage(roomCode string, playerID uuid.UUID, message string, messageType string) error
+	GetChatHistory(roomCode string, playerID string, limit int) ([]ChatMessagePayload, error)
+	SendSystemMessage(roomCode string, message string) error
+}
 
 // SendChatMessage handles sending chat messages in a game
 func (m *Manager) SendChatMessage(roomCode string, playerID uuid.UUID, message string, messageType string) error {
@@ -63,7 +71,7 @@ func (m *Manager) SendChatMessage(roomCode string, playerID uuid.UUID, message s
 	}
 
 	// Persist to database
-	if err := m.persistChatMessage(&chatMessage); err != nil {
+	if err := m.PersistChatMessage(context.Background(), &chatMessage); err != nil {
 		return fmt.Errorf("failed to persist chat message: %w", err)
 	}
 
@@ -99,7 +107,7 @@ func (m *Manager) GetChatHistory(roomCode string, phase string, limit int) ([]Ch
 	}
 
 	// Get messages from database
-	messages, err := m.getChatMessages(game.ID, phase, limit)
+	messages, err := m.GetChatMessages(context.Background(), game.ID, phase, limit)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get chat messages: %w", err)
 	}
@@ -157,7 +165,7 @@ func (m *Manager) SendSystemMessage(roomCode string, message string) error {
 	}
 
 	// Persist to database
-	if err := m.persistChatMessage(&chatMessage); err != nil {
+	if err := m.PersistChatMessage(context.Background(), &chatMessage); err != nil {
 		logger.Error("Failed to persist system message", "error", err)
 		// Continue anyway - system messages are not critical
 	}

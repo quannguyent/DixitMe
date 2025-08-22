@@ -1,6 +1,7 @@
 package game
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"strings"
@@ -12,6 +13,16 @@ import (
 
 	"github.com/google/uuid"
 )
+
+// GameService defines the core game management operations
+type GameService interface {
+	// Game lifecycle
+	CreateGame(roomCode string, creatorID uuid.UUID, creatorName string) (*GameState, error)
+	JoinGame(roomCode string, playerID uuid.UUID, playerName string) (*GameState, error)
+	StartGame(roomCode string, playerID uuid.UUID) error
+	GetGame(roomCode string) *GameState
+	GetActiveGamesCount() int
+}
 
 // CreateGame creates a new game with the given room code
 func (m *Manager) CreateGame(roomCode string, creatorID uuid.UUID, creatorName string) (*GameState, error) {
@@ -68,7 +79,7 @@ func (m *Manager) CreateGame(roomCode string, creatorID uuid.UUID, creatorName s
 	m.games[roomCode] = game
 
 	// Persist to database
-	if err := m.persistGame(game); err != nil {
+	if err := m.PersistGame(context.Background(), game); err != nil {
 		delete(m.games, roomCode)
 		// Check if it's a duplicate key error
 		if strings.Contains(err.Error(), "duplicate key value violates unique constraint") &&
@@ -79,7 +90,7 @@ func (m *Manager) CreateGame(roomCode string, creatorID uuid.UUID, creatorName s
 	}
 
 	// Store in Redis for scaling
-	if err := m.storeGameInRedis(game); err != nil {
+	if err := m.StoreGameInRedis(context.Background(), game); err != nil {
 		logger.Error("Failed to store game in Redis", "error", err, "room_code", roomCode)
 	}
 
@@ -129,13 +140,13 @@ func (m *Manager) JoinGame(roomCode string, playerID uuid.UUID, playerName strin
 	game.Players[playerID] = player
 
 	// Persist player
-	if err := m.persistGamePlayer(game.ID, player); err != nil {
+	if err := m.PersistGamePlayer(context.Background(), game.ID, player); err != nil {
 		delete(game.Players, playerID)
 		return nil, fmt.Errorf("failed to persist player: %w", err)
 	}
 
 	// Update Redis
-	if err := m.storeGameInRedis(game); err != nil {
+	if err := m.StoreGameInRedis(context.Background(), game); err != nil {
 		logger.Error("Failed to update game in Redis", "error", err, "room_code", roomCode)
 	}
 
@@ -219,18 +230,18 @@ func (m *Manager) AddBot(roomCode string, botLevel string) (*GameState, error) {
 		BotLevel: botLevel,
 	}
 
-	if err := m.persistPlayer(dbPlayer); err != nil {
+	if err := m.PersistPlayer(context.Background(), dbPlayer); err != nil {
 		delete(game.Players, botID)
 		return nil, fmt.Errorf("failed to persist bot player: %w", err)
 	}
 
-	if err := m.persistGamePlayer(game.ID, player); err != nil {
+	if err := m.PersistGamePlayer(context.Background(), game.ID, player); err != nil {
 		delete(game.Players, botID)
 		return nil, fmt.Errorf("failed to persist bot game player: %w", err)
 	}
 
 	// Update Redis
-	if err := m.storeGameInRedis(game); err != nil {
+	if err := m.StoreGameInRedis(context.Background(), game); err != nil {
 		logger.Error("Failed to update game in Redis", "error", err, "room_code", roomCode)
 	}
 
@@ -287,7 +298,7 @@ func (m *Manager) StartGame(roomCode string, playerID uuid.UUID) error {
 	}
 
 	// Update database
-	if err := m.updateGameStatus(game.ID, models.GameStatusInProgress); err != nil {
+	if err := m.UpdateGameStatus(context.Background(), game.ID, models.GameStatusInProgress); err != nil {
 		return fmt.Errorf("failed to update game status: %w", err)
 	}
 

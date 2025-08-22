@@ -4,7 +4,6 @@ import (
 	"net/http"
 
 	"dixitme/internal/database"
-	"dixitme/internal/services/game"
 
 	"github.com/gin-gonic/gin"
 )
@@ -37,14 +36,9 @@ func HealthCheck(c *gin.Context) {
 		return
 	}
 
-	// Check active games
-	manager := game.GetManager()
-	activeGamesCount := manager.GetActiveGamesCount()
-
 	c.JSON(http.StatusOK, gin.H{
-		"status":       "healthy",
-		"active_games": activeGamesCount,
-		"timestamp":    c.GetHeader("X-Request-ID"),
+		"status":    "healthy",
+		"timestamp": c.GetHeader("X-Request-ID"),
 	})
 }
 

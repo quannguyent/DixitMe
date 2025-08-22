@@ -12,6 +12,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// CardHandlers handles card-related HTTP requests
+type CardHandlers struct {
+	deps *HandlerDependencies
+}
+
+// NewCardHandlers creates a new CardHandlers instance
+func NewCardHandlers(deps *HandlerDependencies) *CardHandlers {
+	return &CardHandlers{deps: deps}
+}
+
 // GetCards returns the list of available cards (placeholder implementation)
 // @Summary Get available cards
 // @Description Get the list of all available cards in the game

@@ -3,6 +3,7 @@ package auth
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"dixitme/internal/database"
 	"dixitme/internal/logger"
@@ -56,8 +57,8 @@ func AuthMiddleware(jwtService *JWTService, required bool) gin.HandlerFunc {
 		// Verify session is still active
 		db := database.GetDB()
 		var session models.Session
-		if err := db.Where("id = ? AND is_active = ? AND expires_at > NOW()",
-			userInfo.SessionID, true).First(&session).Error; err != nil {
+		if err := db.Where("id = ? AND is_active = ? AND expires_at > ?",
+			userInfo.SessionID, true, time.Now()).First(&session).Error; err != nil {
 			if required {
 				c.JSON(http.StatusUnauthorized, gin.H{
 					"error": "Session expired or invalid",

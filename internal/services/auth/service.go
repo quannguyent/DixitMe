@@ -14,6 +14,29 @@ import (
 	"gorm.io/gorm"
 )
 
+// AuthenticationService defines the authentication operations interface
+type AuthenticationService interface {
+	// User registration and login
+	RegisterWithPassword(email, username, displayName, password string) (*models.User, error)
+	LoginWithPassword(emailOrUsername, password string, ipAddress, userAgent string) (*models.User, *models.Session, string, error)
+	LoginWithGoogle(googleAccessToken string, ipAddress, userAgent string) (*models.User, *models.Session, string, error)
+
+	// Session management
+	CreateGuestSession(guestName, ipAddress, userAgent string) (*models.Session, string, error)
+	RefreshSession(sessionID uuid.UUID) (*models.Session, string, error)
+	LogoutSession(sessionID uuid.UUID) error
+	ValidateSession(sessionID uuid.UUID) bool
+
+	// Session cleanup
+	CleanupExpiredSessions() error
+	GetActiveSessionsCount() int64
+
+	// User management
+	GetUserByID(userID uuid.UUID) (*models.User, error)
+	UpdateLastLogin(userID uuid.UUID) error
+	UpgradeGuestToUser(sessionID uuid.UUID, email, username, displayName, password string) (*models.User, error)
+}
+
 // AuthService handles authentication operations
 type AuthService struct {
 	jwtService *JWTService
@@ -179,8 +202,8 @@ func (a *AuthService) CreateGuestSession(guestName, ipAddress, userAgent string)
 // RefreshSession refreshes an existing session
 func (a *AuthService) RefreshSession(sessionID uuid.UUID) (*models.Session, string, error) {
 	var session models.Session
-	if err := a.db.Preload("User").Where("id = ? AND is_active = ? AND expires_at > NOW()",
-		sessionID, true).First(&session).Error; err != nil {
+	if err := a.db.Preload("User").Where("id = ? AND is_active = ? AND expires_at > ?",
+		sessionID, true, time.Now()).First(&session).Error; err != nil {
 		return nil, "", fmt.Errorf("session not found or expired")
 	}
 
@@ -234,7 +257,7 @@ func (a *AuthService) GetSessionByID(sessionID uuid.UUID) (*models.Session, erro
 
 // CleanupExpiredSessions removes expired sessions
 func (a *AuthService) CleanupExpiredSessions() error {
-	result := a.db.Where("expires_at < NOW()").Delete(&models.Session{})
+	result := a.db.Where("expires_at < ?", time.Now()).Delete(&models.Session{})
 	if result.Error != nil {
 		return fmt.Errorf("failed to cleanup expired sessions: %w", result.Error)
 	}
@@ -299,4 +322,101 @@ func generateUsernameFromEmail(email string) string {
 		return email[:at] + "_" + uuid.New().String()[:4]
 	}
 	return "user_" + uuid.New().String()[:8]
+}
+
+// GetActiveSessionsCount returns the number of active sessions
+func (a *AuthService) GetActiveSessionsCount() int64 {
+	var count int64
+	a.db.Model(&models.Session{}).Where("is_active = ? AND expires_at > ?", true, time.Now()).Count(&count)
+	return count
+}
+
+// LogoutSession deactivates a session
+func (a *AuthService) LogoutSession(sessionID uuid.UUID) error {
+	result := a.db.Model(&models.Session{}).Where("id = ?", sessionID).Update("is_active", false)
+	if result.Error != nil {
+		return fmt.Errorf("failed to logout session: %w", result.Error)
+	}
+	if result.RowsAffected == 0 {
+		return fmt.Errorf("session not found")
+	}
+	return nil
+}
+
+// UpdateLastLogin updates the user's last login timestamp
+func (a *AuthService) UpdateLastLogin(userID uuid.UUID) error {
+	now := time.Now()
+	result := a.db.Model(&models.User{}).Where("id = ?", userID).Update("last_login_at", &now)
+	if result.Error != nil {
+		return fmt.Errorf("failed to update last login: %w", result.Error)
+	}
+	return nil
+}
+
+// UpgradeGuestToUser converts a guest session to a registered user account
+func (a *AuthService) UpgradeGuestToUser(sessionID uuid.UUID, email, username, displayName, password string) (*models.User, error) {
+	// Check if session exists and is active
+	var session models.Session
+	if err := a.db.First(&session, "id = ? AND is_active = ? AND auth_type = ?",
+		sessionID, true, models.AuthTypeGuest).Error; err != nil {
+		return nil, fmt.Errorf("guest session not found or inactive")
+	}
+
+	// Check if email or username already exists
+	var existingUser models.User
+	if err := a.db.Where("email = ? OR username = ?", email, username).First(&existingUser).Error; err == nil {
+		return nil, fmt.Errorf("user with this email or username already exists")
+	}
+
+	// Hash password
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	// Create user
+	user := models.User{
+		ID:           uuid.New(),
+		Email:        email,
+		Username:     username,
+		DisplayName:  displayName,
+		PasswordHash: string(hashedPassword),
+		AuthType:     models.AuthTypePassword,
+		IsActive:     true,
+		CreatedAt:    time.Now(),
+		UpdatedAt:    time.Now(),
+	}
+
+	if err := a.db.Create(&user).Error; err != nil {
+		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	// Update session to link to the new user
+	if err := a.db.Model(&session).Updates(map[string]interface{}{
+		"user_id":   user.ID,
+		"auth_type": models.AuthTypePassword,
+	}).Error; err != nil {
+		return nil, fmt.Errorf("failed to update session: %w", err)
+	}
+
+	logger.GetLogger().Info("Guest account upgraded to user", "user_id", user.ID, "email", email)
+	return &user, nil
+}
+
+// ValidateSession checks if a session is active and not expired
+func (a *AuthService) ValidateSession(sessionID uuid.UUID) bool {
+	var session models.Session
+	err := a.db.First(&session, "id = ? AND is_active = ?", sessionID, true).Error
+	if err != nil {
+		return false
+	}
+
+	// Check if session is expired
+	if time.Now().After(session.ExpiresAt) {
+		// Deactivate expired session
+		a.db.Model(&session).Update("is_active", false)
+		return false
+	}
+
+	return true
 }

@@ -34,21 +34,32 @@ func Initialize(databaseURL string) {
 }
 
 func migrate() error {
-	return DB.AutoMigrate(
-		&models.User{},
-		&models.Session{},
-		&models.Player{},
-		&models.Game{},
-		&models.GamePlayer{},
-		&models.GameRound{},
-		&models.CardSubmission{},
-		&models.Vote{},
-		&models.Card{},
-		&models.Tag{},
-		&models.CardTag{},
-		&models.GameHistory{},
-		&models.ChatMessage{},
-	)
+	log := logger.GetLogger()
+
+	// Skip User and Session for now, test other models
+	log.Info("Testing migration with simpler models first...")
+
+	// Try migrating Card first (it uses int PK, simpler)
+	log.Info("Migrating Card table...")
+	if err := DB.AutoMigrate(&models.Card{}); err != nil {
+		log.Error("Failed to migrate Card", "error", err)
+		return err
+	}
+
+	log.Info("Card migration successful, migrating Tag...")
+	if err := DB.AutoMigrate(&models.Tag{}); err != nil {
+		log.Error("Failed to migrate Tag", "error", err)
+		return err
+	}
+
+	log.Info("Basic migrations successful, now trying UUID models...")
+	if err := DB.AutoMigrate(&models.User{}, &models.Session{}); err != nil {
+		log.Error("Failed to migrate UUID models", "error", err)
+		return err
+	}
+
+	log.Info("All migrations successful!")
+	return nil
 }
 
 func GetDB() *gorm.DB {

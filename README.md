@@ -199,113 +199,32 @@ This project follows the [Go standard project layout](https://github.com/golang-
 ```
 DixitMe/
 ├── cmd/                     # 🚀 Application entry points
-│   ├── server/main.go       #     → Main server application 
-│   └── seed/main.go         #     → Database seeding CLI tool
-├── pkg/                     # 📦 Reusable libraries (can be imported by other projects)
-│   ├── utils/               #     → Common utility functions
-│   │   └── strings.go       #         ┗ String manipulation & generation
-│   └── validator/           #     → Input validation functions
-│       └── validator.go     #         ┗ Email, password, username validation
-├── internal/                # 🔒 Private application code (cannot be imported externally)
-│   ├── app/                 # 🎯 Application initialization & dependency injection
-│   │   └── app.go           #     → App struct, NewApp(), Run(), graceful shutdown
-│   ├── transport/           # 🌐 Transport layer (HTTP handlers, WebSocket, routing)
-│   │   ├── handlers/        #     → HTTP API endpoints (domain-separated)
-│   │   │   ├── common.go    #         ┣ Health checks & CORS middleware
-│   │   │   ├── player.go    #         ┣ Player management & statistics
-│   │   │   ├── game.go      #         ┣ Game management & bot operations
-│   │   │   ├── card.go      #         ┣ Card management & image uploads
-│   │   │   ├── tag.go       #         ┣ Tag management for categorization
-│   │   │   ├── chat.go      #         ┣ Chat messages & communication
-│   │   │   ├── admin.go     #         ┣ Administrative operations
-│   │   │   └── types.go     #         ┗ Request/response type definitions
-│   │   ├── router/          #     → HTTP routing & middleware setup
-│   │   │   └── router.go    #         ┗ Organized route definitions
-│   │   └── websocket/       #     → WebSocket communication (real-time)
-│   │       ├── auth.go      #         ┣ Authentication & token extraction
-│   │       ├── connection.go#         ┣ WebSocket connection management
-│   │       ├── handlers.go  #         ┣ Message routing & game actions
-│   │       └── types.go     #         ┗ WebSocket message type definitions
-│   ├── services/            # 💼 Business logic layer (core application logic)
-│   │   ├── auth/            #     → Authentication & JWT services
-│   │   │   ├── handlers.go  #         ┣ Auth HTTP endpoints
-│   │   │   ├── jwt.go       #         ┣ JWT token management
-│   │   │   ├── middleware.go#         ┣ Auth middleware
-│   │   │   └── service.go   #         ┗ Authentication business logic
-│   │   ├── game/            #     → 🎮 Core game logic & management
-│   │   │   ├── manager.go   #         ┣ Main game manager singleton
-│   │   │   ├── game_actions.go #      ┣ Game lifecycle (create, join, start)
-│   │   │   ├── round_actions.go #     ┣ Round management & gameplay
-│   │   │   ├── bot_actions.go #       ┣ Bot AI integration
-│   │   │   ├── chat_actions.go #      ┣ Real-time chat system
-│   │   │   ├── persistence.go #       ┣ Database operations
-│   │   │   ├── cleanup.go   #         ┣ Inactive game cleanup service
-│   │   │   ├── broadcasting.go #      ┣ WebSocket message broadcasting
-│   │   │   └── types.go     #         ┗ Game state & message definitions
-│   │   └── bot/             #     → AI bot players with heuristic algorithms
-│   │       └── ai.go        #         ┗ Difficulty-based clue generation
-│   ├── models/              # 📊 Database layer (data persistence)
-│   │   ├── user.go          #     → User accounts & authentication
-│   │   ├── player.go        #     → Player entities & game participation
-│   │   ├── game.go          #     → Game sessions & game history
-│   │   ├── round.go         #     → Game rounds, submissions & votes
-│   │   ├── card.go          #     → Card entities & tag system
-│   │   ├── chat.go          #     → Chat messages & communication
-│   │   └── models.go        #     → Package documentation
-│   ├── database/            #     → Database connection & migrations
-│   │   └── database.go      #         ┗ PostgreSQL setup with GORM
-│   ├── config/              #     → Configuration management
-│   │   └── config.go        #         ┗ Environment variable loading
-│   ├── logger/              #     → Structured logging
-│   │   └── logger.go        #         ┗ slog configuration (JSON/text)
-│   ├── redis/               #     → Redis cache integration
-│   │   └── redis.go         #         ┗ Redis client setup
-│   ├── storage/             #     → File storage (MinIO object storage)
-│   │   └── minio.go         #         ┗ MinIO client & file operations
-│   └── seeder/              #     → Database seeding logic
-│       └── cards.go         #         ┗ Seed cards, tags, and default data
-├── configs/                 # ⚙️ Static configuration files
-│   ├── server.yaml          #     → Server & application settings
-│   ├── config.env.example   #     → Environment template
-│   └── config.env.development #   → Development environment
-├── api/                     # 📋 API documentation & specifications
-│   └── v1/                  #     → API version 1
-│       ├── swagger.json     #         ┣ OpenAPI specification (JSON)
-│       └── swagger.yaml     #         ┗ OpenAPI specification (YAML)
-├── deployments/             # 🚀 Deployment configurations
-│   └── docker/              #     → Docker deployment files
-│       ├── Dockerfile       #         ┣ Multi-stage container build
-│       ├── docker-compose.yml #       ┣ Production compose file
-│       └── docker-compose.dev.yml #   ┗ Development compose file
+├── pkg/                     # 📦 Reusable libraries
+├── internal/                # 🔒 Private application code
+│   ├── app/                 # 🎯 Application initialization
+│   ├── transport/           # 🌐 HTTP handlers & WebSocket
+│   ├── services/            # 💼 Business logic layer
+│   ├── models/              # 📊 Database models
+│   ├── database/            # 🗄️ Database connection
+│   ├── config/              # ⚙️ Configuration management
+│   ├── logger/              # 📝 Structured logging
+│   ├── redis/               # 🔴 Redis integration
+│   ├── storage/             # 💾 File storage (MinIO)
+│   └── seeder/              # 🌱 Database seeding
+├── configs/                 # ⚙️ Configuration files
+├── api/                     # 📋 API documentation
+├── deployments/             # 🚀 Docker & deployment
 ├── web/                     # ⚛️ React frontend (TypeScript + CSS Modules)
+│   ├── public/              #     → Static assets (index.html)
 │   ├── src/components/      #     → React UI components
-│   │   ├── Auth.tsx         #         ┣ Authentication modal (login/register/guest)
-│   │   ├── Card.tsx         #         ┣ Individual card display with animations
-│   │   ├── Chat.tsx         #         ┣ Real-time chat with emoji picker
-│   │   ├── GameBoard.tsx    #         ┣ Main game interface during play
-│   │   ├── GameLanding.tsx  #         ┣ Primary landing page (join/create)
-│   │   ├── GamePhaseIndicator.tsx #   ┣ Visual game phase tracker
-│   │   ├── Lobby.tsx        #         ┣ Game lobby for waiting players
-│   │   ├── PlayerHand.tsx   #         ┣ Player's card hand interface
-│   │   ├── UserInfo.tsx     #         ┣ User profile & guest upgrade
-│   │   ├── VotingPhase.tsx  #         ┣ Voting interface for cards
-│   │   └── *.module.css     #         ┗ CSS Modules for each component
 │   ├── src/store/           #     → State management (Zustand)
-│   │   ├── authStore.ts     #         ┣ Authentication state & actions
-│   │   └── gameStore.ts     #         ┗ Game state, WebSocket & actions
 │   ├── src/types/           #     → TypeScript definitions
-│   │   └── game.ts          #         ┗ Game interfaces & message types
-│   ├── App.tsx              #     → Main app with routing logic
-│   ├── index.tsx            #     → React entry point
-│   └── index.css            #     → Global styles
-├── assets/                  # 🎨 Static game assets
-│   ├── cards/               #     → Card image files (84 Dixit cards)
-│   └── tags.json            #     → Card categorization tags for bot AI
-├── scripts/                 # 🔧 Utility scripts
-│   └── generate-swagger.sh  #     → API documentation generation
-├── go.mod / go.sum          # 📦 Go dependency management
-└── README.md                # 📖 Project documentation
+│   └── package.json         #     → NPM dependencies
+├── assets/                  # 🎨 Game assets (cards, tags)
+└── scripts/                 # 🔧 Utility scripts
 ```
+
+> 📋 **For detailed file-by-file structure**, see [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md)
 
 ### 🏗️ Architecture Highlights
 
@@ -322,9 +241,11 @@ DixitMe/
 - **📱 Responsive Design**: Mobile-first React components with CSS Modules
 - **🧪 Clean Separation**: Modular Go packages, interface-driven design
 - **⚡ Performance**: Redis caching, connection pooling, optimized queries
-- **📦 Go Standards**: Follows official Go project layout conventions
 
 ## Development
+
+### 🎓 New Developer Guide
+For comprehensive codebase and business flow understanding, see [DEVELOPER_GUIDE.md](./DEVELOPER_GUIDE.md) - covers everything from Go/React basics to advanced architecture patterns.
 
 ### API Documentation
 - **Regenerate Swagger docs** after making API changes:
@@ -341,6 +262,8 @@ DixitMe/
 - **Add HTTP endpoints**: Place in `/internal/transport/handlers/`
 - **Add database models**: Place in `/internal/models/`
 - **Add configuration**: Static configs in `/configs/`, code in `/internal/config/`
+
+> 📋 **For comprehensive guidelines and detailed explanations**, see [PROJECT_STRUCTURE.md](./PROJECT_STRUCTURE.md)
 
 ### Adding New Cards
 1. Add card images to `assets/cards/` (numbered 1.jpg, 2.jpg, etc.)
@@ -361,14 +284,6 @@ ws.send(JSON.stringify({
   payload: { room_code: 'TEST', player_name: 'TestPlayer' }
 }));
 ```
-
-## Contributing
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
 
 ## License
 

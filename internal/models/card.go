@@ -6,7 +6,7 @@ import (
 
 // Card represents a game card with tags for categorization and bot AI
 type Card struct {
-	ID          int       `json:"id" gorm:"primary_key"`
+	ID          int       `json:"id" gorm:"primaryKey"`
 	ImageURL    string    `json:"image_url" gorm:"not null"`
 	Title       string    `json:"title"`
 	Description string    `json:"description"`
@@ -21,7 +21,7 @@ type Card struct {
 
 // Tag represents a categorization tag that can be applied to cards
 type Tag struct {
-	ID          int       `json:"id" gorm:"primary_key"`
+	ID          int       `json:"id" gorm:"primaryKey"`
 	Name        string    `json:"name" gorm:"unique;not null;index"`
 	Slug        string    `json:"slug" gorm:"unique;not null;index"`
 	Description string    `json:"description"`

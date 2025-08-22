@@ -10,6 +10,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// TagHandlers handles tag-related HTTP requests
+type TagHandlers struct {
+	deps *HandlerDependencies
+}
+
+// NewTagHandlers creates a new TagHandlers instance
+func NewTagHandlers(deps *HandlerDependencies) *TagHandlers {
+	return &TagHandlers{deps: deps}
+}
+
 // CreateTag creates a new tag for card categorization
 // @Summary Create new tag
 // @Description Create a new tag for card categorization

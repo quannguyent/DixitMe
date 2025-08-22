@@ -6,6 +6,11 @@ import (
 	"dixitme/internal/logger"
 )
 
+// GameBroadcastService defines broadcasting operations
+type GameBroadcastService interface {
+	BroadcastToGame(gameState *GameState, messageType MessageType, message interface{})
+}
+
 // BroadcastToGame sends a message to all connected players in a game
 func (m *Manager) BroadcastToGame(game *GameState, messageType MessageType, payload interface{}) {
 	message := GameMessage{

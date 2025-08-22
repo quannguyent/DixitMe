@@ -17,7 +17,7 @@ const (
 
 // Player represents a player in a game session (can be guest or registered user)
 type Player struct {
-	ID        uuid.UUID      `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	ID        uuid.UUID      `json:"id" gorm:"type:uuid;primaryKey"`
 	UserID    *uuid.UUID     `json:"user_id,omitempty" gorm:"type:uuid;index"` // NULL for guest players
 	Name      string         `json:"name" gorm:"not null"`
 	Type      PlayerType     `json:"type" gorm:"default:'human'"`

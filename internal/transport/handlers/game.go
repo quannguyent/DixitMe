@@ -5,10 +5,19 @@ import (
 
 	"dixitme/internal/database"
 	"dixitme/internal/models"
-	"dixitme/internal/services/game"
 
 	"github.com/gin-gonic/gin"
 )
+
+// GameHandlers handles game-related HTTP requests
+type GameHandlers struct {
+	deps *HandlerDependencies
+}
+
+// NewGameHandlers creates a new GameHandlers instance
+func NewGameHandlers(deps *HandlerDependencies) *GameHandlers {
+	return &GameHandlers{deps: deps}
+}
 
 // GetGame gets a game by room code
 // @Summary Get game by room code
@@ -21,7 +30,7 @@ import (
 // @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Router /games/{room_code} [get]
-func GetGame(c *gin.Context) {
+func (h *GameHandlers) GetGame(c *gin.Context) {
 	var req GetGameRequest
 	if err := c.ShouldBindUri(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -36,8 +45,7 @@ func GetGame(c *gin.Context) {
 	}
 
 	// Check if game is live (exists in memory)
-	gameManager := game.GetManager()
-	liveGame := gameManager.GetGame(req.RoomCode)
+	liveGame := h.deps.GameService.GetGame(req.RoomCode)
 	isLive := liveGame != nil
 
 	response := GetGameResponse{
@@ -57,7 +65,7 @@ func GetGame(c *gin.Context) {
 // @Success 200 {object} GetGamesResponse
 // @Failure 500 {object} map[string]string
 // @Router /games [get]
-func GetGames(c *gin.Context) {
+func (h *GameHandlers) GetGames(c *gin.Context) {
 	db := database.GetDB()
 	var games []models.Game
 
@@ -83,7 +91,7 @@ func GetGames(c *gin.Context) {
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
 // @Router /games/add-bot [post]
-func AddBotToGame(c *gin.Context) {
+func (h *GameHandlers) AddBotToGame(c *gin.Context) {
 	var req AddBotRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -100,11 +108,10 @@ func AddBotToGame(c *gin.Context) {
 		return
 	}
 
-	// Get game manager and add bot
-	gameManager := game.GetManager()
-	liveGame := gameManager.GetGame(req.RoomCode)
+	// Get game and add bot
+	liveGame := h.deps.GameService.GetGame(req.RoomCode)
 	if liveGame == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Game not found or not active"})
+		c.JSON(http.StatusNotFound, gin.H{"error": "Game not found"})
 		return
 	}
 
@@ -121,7 +128,7 @@ func AddBotToGame(c *gin.Context) {
 	}
 
 	// Add bot to game
-	_, err := gameManager.AddBot(req.RoomCode, req.BotLevel)
+	_, err := h.deps.GameService.AddBot(req.RoomCode, req.BotLevel)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -143,7 +150,7 @@ func AddBotToGame(c *gin.Context) {
 // @Success 200 {object} BotStatsResponse
 // @Failure 500 {object} map[string]interface{}
 // @Router /bots/stats [get]
-func GetBotStats(c *gin.Context) {
+func (h *GameHandlers) GetBotStats(c *gin.Context) {
 	db := database.GetDB()
 
 	var totalBots int64

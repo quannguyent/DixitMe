@@ -11,6 +11,16 @@ import (
 	"github.com/google/uuid"
 )
 
+// ChatHandlers handles chat-related HTTP requests
+type ChatHandlers struct {
+	deps *HandlerDependencies
+}
+
+// NewChatHandlers creates a new ChatHandlers instance
+func NewChatHandlers(deps *HandlerDependencies) *ChatHandlers {
+	return &ChatHandlers{deps: deps}
+}
+
 // SendChatMessage sends a chat message to a game
 // @Summary Send chat message
 // @Description Send a chat message to a specific game

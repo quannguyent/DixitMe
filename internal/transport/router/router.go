@@ -13,8 +13,14 @@ import (
 
 // RouterDependencies holds all the dependencies needed to set up routes
 type RouterDependencies struct {
-	AuthHandlers *auth.AuthHandlers
-	JWTService   *auth.JWTService
+	AuthHandlers   *auth.AuthHandlers
+	JWTService     *auth.JWTService
+	GameHandlers   *handlers.GameHandlers
+	PlayerHandlers *handlers.PlayerHandlers
+	CardHandlers   *handlers.CardHandlers
+	TagHandlers    *handlers.TagHandlers
+	AdminHandlers  *handlers.AdminHandlers
+	ChatHandlers   *handlers.ChatHandlers
 }
 
 // SetupRouter creates and configures the Gin router with all routes
@@ -56,13 +62,13 @@ func setupAPIRoutes(r *gin.Engine, deps *RouterDependencies) {
 	api := r.Group("/api/v1")
 	{
 		setupAuthRoutes(api, deps)
-		setupPlayerRoutes(api, deps.JWTService)
-		setupGameRoutes(api, deps.JWTService)
-		setupCardRoutes(api, deps.JWTService)
-		setupTagRoutes(api, deps.JWTService)
-		setupBotRoutes(api)
-		setupAdminRoutes(api, deps.JWTService)
-		setupChatRoutes(api, deps.JWTService)
+		setupPlayerRoutes(api, deps)
+		setupGameRoutes(api, deps)
+		setupCardRoutes(api, deps)
+		setupTagRoutes(api, deps)
+		setupBotRoutes(api, deps)
+		setupAdminRoutes(api, deps)
+		setupChatRoutes(api, deps)
 	}
 }
 
@@ -86,10 +92,10 @@ func setupAuthRoutes(api *gin.RouterGroup, deps *RouterDependencies) {
 }
 
 // setupPlayerRoutes configures player management routes
-func setupPlayerRoutes(api *gin.RouterGroup, jwtService *auth.JWTService) {
+func setupPlayerRoutes(api *gin.RouterGroup, deps *RouterDependencies) {
 	// Player routes (allow both auth and guest)
 	playerGroup := api.Group("/players")
-	playerGroup.Use(auth.GuestOrAuth(jwtService))
+	playerGroup.Use(auth.GuestOrAuth(deps.JWTService))
 	{
 		playerGroup.POST("", handlers.CreatePlayer)
 		playerGroup.GET("/:id", handlers.GetPlayer)
@@ -97,7 +103,7 @@ func setupPlayerRoutes(api *gin.RouterGroup, jwtService *auth.JWTService) {
 
 	// Player stats routes (separate to avoid route conflicts)
 	playerStatsGroup := api.Group("/player")
-	playerStatsGroup.Use(auth.GuestOrAuth(jwtService))
+	playerStatsGroup.Use(auth.GuestOrAuth(deps.JWTService))
 	{
 		playerStatsGroup.GET("/:player_id/stats", handlers.GetPlayerStats)
 		playerStatsGroup.GET("/:player_id/history", handlers.GetGameHistory)
@@ -105,18 +111,18 @@ func setupPlayerRoutes(api *gin.RouterGroup, jwtService *auth.JWTService) {
 }
 
 // setupGameRoutes configures game management routes
-func setupGameRoutes(api *gin.RouterGroup, jwtService *auth.JWTService) {
+func setupGameRoutes(api *gin.RouterGroup, deps *RouterDependencies) {
 	gameGroup := api.Group("/games")
-	gameGroup.Use(auth.GuestOrAuth(jwtService))
+	gameGroup.Use(auth.GuestOrAuth(deps.JWTService))
 	{
-		gameGroup.GET("", handlers.GetGames)
-		gameGroup.GET("/:room_code", handlers.GetGame)
-		gameGroup.POST("/add-bot", handlers.AddBotToGame)
+		gameGroup.GET("", deps.GameHandlers.GetGames)
+		gameGroup.GET("/:room_code", deps.GameHandlers.GetGame)
+		gameGroup.POST("/add-bot", deps.GameHandlers.AddBotToGame)
 	}
 }
 
 // setupCardRoutes configures card management routes
-func setupCardRoutes(api *gin.RouterGroup, jwtService *auth.JWTService) {
+func setupCardRoutes(api *gin.RouterGroup, deps *RouterDependencies) {
 	cardsGroup := api.Group("/cards")
 	{
 		// Public card routes
@@ -125,32 +131,32 @@ func setupCardRoutes(api *gin.RouterGroup, jwtService *auth.JWTService) {
 		cardsGroup.GET("/:card_id", handlers.GetCardWithTags)
 
 		// Protected card routes (auth required)
-		cardsGroup.POST("", auth.RequireAuth(jwtService), handlers.CreateCard)
-		cardsGroup.POST("/:card_id/image", auth.RequireAuth(jwtService), handlers.UploadCardImage)
+		cardsGroup.POST("", auth.RequireAuth(deps.JWTService), handlers.CreateCard)
+		cardsGroup.POST("/:card_id/image", auth.RequireAuth(deps.JWTService), handlers.UploadCardImage)
 	}
 }
 
 // setupTagRoutes configures tag management routes
-func setupTagRoutes(api *gin.RouterGroup, jwtService *auth.JWTService) {
+func setupTagRoutes(api *gin.RouterGroup, deps *RouterDependencies) {
 	tagsGroup := api.Group("/tags")
 	{
-		tagsGroup.GET("", handlers.ListTags)                                 // Public
-		tagsGroup.POST("", auth.RequireAuth(jwtService), handlers.CreateTag) // Auth required
+		tagsGroup.GET("", handlers.ListTags)                                      // Public
+		tagsGroup.POST("", auth.RequireAuth(deps.JWTService), handlers.CreateTag) // Auth required
 	}
 }
 
 // setupBotRoutes configures bot management routes
-func setupBotRoutes(api *gin.RouterGroup) {
+func setupBotRoutes(api *gin.RouterGroup, deps *RouterDependencies) {
 	botGroup := api.Group("/bots")
 	{
-		botGroup.GET("/stats", handlers.GetBotStats) // Public
+		botGroup.GET("/stats", deps.GameHandlers.GetBotStats) // Public
 	}
 }
 
 // setupAdminRoutes configures admin routes (all require authentication)
-func setupAdminRoutes(api *gin.RouterGroup, jwtService *auth.JWTService) {
+func setupAdminRoutes(api *gin.RouterGroup, deps *RouterDependencies) {
 	adminGroup := api.Group("/admin")
-	adminGroup.Use(auth.RequireAuth(jwtService)) // All admin routes require auth
+	adminGroup.Use(auth.RequireAuth(deps.JWTService)) // All admin routes require auth
 	{
 		adminGroup.POST("/seed", handlers.SeedDatabase)
 		adminGroup.POST("/seed/tags", handlers.SeedTags)
@@ -161,9 +167,9 @@ func setupAdminRoutes(api *gin.RouterGroup, jwtService *auth.JWTService) {
 }
 
 // setupChatRoutes configures chat routes
-func setupChatRoutes(api *gin.RouterGroup, jwtService *auth.JWTService) {
+func setupChatRoutes(api *gin.RouterGroup, deps *RouterDependencies) {
 	chatGroup := api.Group("/chat")
-	chatGroup.Use(auth.GuestOrAuth(jwtService))
+	chatGroup.Use(auth.GuestOrAuth(deps.JWTService))
 	{
 		chatGroup.POST("/send", handlers.SendChatMessage)
 		chatGroup.GET("/history", handlers.GetChatHistory)

@@ -11,6 +11,16 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// AdminHandlers handles admin-related HTTP requests
+type AdminHandlers struct {
+	deps *HandlerDependencies
+}
+
+// NewAdminHandlers creates a new AdminHandlers instance
+func NewAdminHandlers(deps *HandlerDependencies) *AdminHandlers {
+	return &AdminHandlers{deps: deps}
+}
+
 // SeedDatabase seeds the database with default data
 // @Summary Seed database
 // @Description Initialize database with default cards and tags

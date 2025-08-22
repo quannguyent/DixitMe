@@ -10,6 +10,12 @@ import (
 	"github.com/google/uuid"
 )
 
+// BotService defines bot-related operations
+type BotService interface {
+	AddBot(roomCode string, botLevel string) (*GameState, error)
+	ProcessBotActions(gameState *GameState)
+}
+
 // ProcessBotActions handles bot actions based on game phase
 func (m *Manager) ProcessBotActions(game *GameState) {
 	if game.CurrentRound == nil {

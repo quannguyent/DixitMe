@@ -19,7 +19,7 @@ const (
 
 // GameRound represents a single round of the game
 type GameRound struct {
-	ID              uuid.UUID   `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	ID              uuid.UUID   `json:"id" gorm:"type:uuid;primaryKey"`
 	GameID          uuid.UUID   `json:"game_id" gorm:"type:uuid;not null"`
 	RoundNumber     int         `json:"round_number"`
 	StorytellerID   uuid.UUID   `json:"storyteller_id" gorm:"type:uuid;not null"`
@@ -38,7 +38,7 @@ type GameRound struct {
 
 // CardSubmission represents a card submitted by a player for a round
 type CardSubmission struct {
-	ID       uuid.UUID `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	ID       uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	RoundID  uuid.UUID `json:"round_id" gorm:"type:uuid;not null"`
 	PlayerID uuid.UUID `json:"player_id" gorm:"type:uuid;not null"`
 	CardID   int       `json:"card_id"` // ID of the card from the deck
@@ -50,7 +50,7 @@ type CardSubmission struct {
 
 // Vote represents a player's vote for which card they think belongs to the storyteller
 type Vote struct {
-	ID       uuid.UUID `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	ID       uuid.UUID `json:"id" gorm:"type:uuid;primaryKey"`
 	RoundID  uuid.UUID `json:"round_id" gorm:"type:uuid;not null"`
 	PlayerID uuid.UUID `json:"player_id" gorm:"type:uuid;not null"`
 	CardID   int       `json:"card_id"` // ID of the card they voted for

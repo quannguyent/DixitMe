@@ -11,6 +11,16 @@ import (
 	"github.com/google/uuid"
 )
 
+// PlayerHandlers handles player-related HTTP requests
+type PlayerHandlers struct {
+	deps *HandlerDependencies
+}
+
+// NewPlayerHandlers creates a new PlayerHandlers instance
+func NewPlayerHandlers(deps *HandlerDependencies) *PlayerHandlers {
+	return &PlayerHandlers{deps: deps}
+}
+
 // CreatePlayer creates a new player
 // @Summary Create a new player
 // @Description Create a new player with a given name

@@ -1,6 +1,7 @@
 package game
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"time"
@@ -10,6 +11,13 @@ import (
 
 	"github.com/google/uuid"
 )
+
+// GamePlayService defines game action operations during gameplay
+type GamePlayService interface {
+	SubmitClue(roomCode string, playerID uuid.UUID, clue string, cardID int) error
+	SubmitCard(roomCode string, playerID uuid.UUID, cardID int) error
+	SubmitVote(roomCode string, playerID uuid.UUID, cardID int) error
+}
 
 // SubmitClue handles storyteller submitting a clue
 func (m *Manager) SubmitClue(roomCode string, playerID uuid.UUID, clue string, cardID int) error {
@@ -62,7 +70,7 @@ func (m *Manager) SubmitClue(roomCode string, playerID uuid.UUID, clue string, c
 	}
 
 	// Persist round update
-	if err := m.updateRound(game.CurrentRound); err != nil {
+	if err := m.UpdateRound(context.Background(), game.CurrentRound); err != nil {
 		return fmt.Errorf("failed to update round: %w", err)
 	}
 
@@ -129,7 +137,7 @@ func (m *Manager) SubmitCard(roomCode string, playerID uuid.UUID, cardID int) er
 	}
 
 	// Persist submission
-	if err := m.persistCardSubmission(game.CurrentRound.ID, playerID, cardID); err != nil {
+	if err := m.PersistCardSubmission(context.Background(), game.CurrentRound.ID, playerID, cardID); err != nil {
 		return fmt.Errorf("failed to persist submission: %w", err)
 	}
 
@@ -192,7 +200,7 @@ func (m *Manager) SubmitVote(roomCode string, playerID uuid.UUID, cardID int) er
 	}
 
 	// Persist vote
-	if err := m.persistVote(game.CurrentRound.ID, playerID, cardID); err != nil {
+	if err := m.PersistVote(context.Background(), game.CurrentRound.ID, playerID, cardID); err != nil {
 		return fmt.Errorf("failed to persist vote: %w", err)
 	}
 
@@ -274,7 +282,7 @@ func (m *Manager) startNewRound(game *GameState) error {
 	game.CurrentRound = round
 
 	// Persist round
-	if err := m.persistRound(game.ID, round); err != nil {
+	if err := m.PersistRound(context.Background(), game.ID, round); err != nil {
 		return fmt.Errorf("failed to persist round: %w", err)
 	}
 
@@ -324,7 +332,7 @@ func (m *Manager) startVotingPhase(game *GameState) {
 	round.RevealedCards = revealedCards
 
 	// Update round in database
-	if err := m.updateRound(round); err != nil {
+	if err := m.UpdateRound(context.Background(), round); err != nil {
 		logger.Error("Failed to update round for voting phase", "error", err)
 	}
 
@@ -347,7 +355,7 @@ func (m *Manager) completeRound(game *GameState) {
 	newScores := m.calculateScores(game)
 
 	// Update round status
-	if err := m.updateRound(round); err != nil {
+	if err := m.UpdateRound(context.Background(), round); err != nil {
 		logger.Error("Failed to update round completion", "error", err)
 	}
 
@@ -490,12 +498,12 @@ func (m *Manager) completeGame(game *GameState) {
 	}
 
 	// Update game status in database
-	if err := m.updateGameStatus(game.ID, models.GameStatusCompleted); err != nil {
+	if err := m.UpdateGameStatus(context.Background(), game.ID, models.GameStatusCompleted); err != nil {
 		logger.Error("Failed to update game completion status", "error", err)
 	}
 
 	// Persist game completion
-	if err := m.persistGameCompletion(game.ID, winnerID); err != nil {
+	if err := m.PersistGameCompletion(context.Background(), game.ID, winnerID); err != nil {
 		logger.Error("Failed to persist game completion", "error", err)
 	}
 

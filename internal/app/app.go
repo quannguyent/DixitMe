@@ -9,7 +9,9 @@ import (
 	"dixitme/internal/seeder"
 	"dixitme/internal/services/auth"
 	"dixitme/internal/services/bot"
+	"dixitme/internal/services/game"
 	"dixitme/internal/storage"
+	"dixitme/internal/transport/handlers"
 	"dixitme/internal/transport/router"
 
 	"github.com/gin-gonic/gin"
@@ -62,10 +64,24 @@ func NewApp() (*App, error) {
 	authService := auth.NewAuthService(jwtService)
 	authHandlers := auth.NewAuthHandlers(authService, jwtService, cfg.Auth.EnableSSO)
 
+	// Initialize game services with dependency injection
+	db := database.GetDB()
+	redisConn := redis.GetClient()
+	gameManager := game.NewManager(db, redisConn)
+
+	// Initialize handlers with dependency injection
+	handlerDeps := handlers.NewHandlerDependencies(authService, gameManager, jwtService)
+
 	// Setup router with dependencies
 	routerDeps := &router.RouterDependencies{
-		AuthHandlers: authHandlers,
-		JWTService:   jwtService,
+		AuthHandlers:   authHandlers,
+		JWTService:     jwtService,
+		GameHandlers:   handlers.NewGameHandlers(handlerDeps),
+		PlayerHandlers: handlers.NewPlayerHandlers(handlerDeps),
+		CardHandlers:   handlers.NewCardHandlers(handlerDeps),
+		TagHandlers:    handlers.NewTagHandlers(handlerDeps),
+		AdminHandlers:  handlers.NewAdminHandlers(handlerDeps),
+		ChatHandlers:   handlers.NewChatHandlers(handlerDeps),
 	}
 	r := router.SetupRouter(routerDeps)
 

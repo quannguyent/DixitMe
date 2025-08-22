@@ -6,6 +6,13 @@ set -e
 
 echo "🎮 Setting up DixitMe Development Environment"
 
+# Navigate to project root (in case script is run from scripts/ directory)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$PROJECT_ROOT"
+
+echo "📁 Working from project root: $(pwd)"
+
 # Check if Go is installed
 if ! command -v go &> /dev/null; then
     echo "❌ Go is not installed. Please install Go 1.21+ first."
@@ -59,7 +66,7 @@ fi
 # Create .env file if it doesn't exist
 if [ ! -f ".env" ]; then
     echo "⚙️  Creating .env file..."
-    cp config.env.example .env
+    cp configs/config.env.example .env
     echo "📝 Please edit .env with your database and Redis URLs"
 else
     echo "✅ .env file already exists"

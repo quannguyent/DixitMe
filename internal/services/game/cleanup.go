@@ -1,11 +1,17 @@
 package game
 
 import (
+	"context"
 	"time"
 
 	"dixitme/internal/logger"
 	"dixitme/internal/models"
 )
+
+// GameCleanupService defines cleanup operations
+type GameCleanupService interface {
+	StopCleanupService()
+}
 
 // Game cleanup service
 
@@ -110,7 +116,7 @@ func (m *Manager) broadcastGameClosure(game *GameState, reason string) {
 }
 
 func (m *Manager) markGameAsAbandoned(game *GameState) {
-	if err := m.updateGameStatus(game.ID, models.GameStatusAbandoned); err != nil {
+	if err := m.UpdateGameStatus(context.Background(), game.ID, models.GameStatusAbandoned); err != nil {
 		logger.Error("Failed to mark game as abandoned",
 			"error", err,
 			"room_code", game.RoomCode,
