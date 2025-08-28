@@ -9,11 +9,7 @@ DixitMe/
 ├── cmd/                     # 🚀 Application entry points
 │   ├── server/main.go       #     → Main server application 
 │   └── seed/main.go         #     → Database seeding CLI tool
-├── pkg/                     # 📦 Reusable libraries (can be imported by other projects)
-│   ├── utils/               #     → Common utility functions
-│   │   └── strings.go       #         ┗ String manipulation & generation
-│   └── validator/           #     → Input validation functions
-│       └── validator.go     #         ┗ Email, password, username validation
+
 ├── internal/                # 🔒 Private application code (cannot be imported externally)
 │   ├── app/                 # 🎯 Application initialization & dependency injection
 │   │   └── app.go           #     → App struct, NewApp(), Run(), graceful shutdown
@@ -73,6 +69,8 @@ DixitMe/
 │   │   └── redis.go         #         ┗ Redis client setup
 │   ├── storage/             #     → File storage (MinIO object storage)
 │   │   └── minio.go         #         ┗ MinIO client & file operations
+│   ├── utils/               #     → Common utility functions & input validation
+│   │   └── strings.go       #         ┗ String manipulation, generation & validation
 │   └── seeder/              #     → Database seeding logic
 │       └── cards.go         #         ┗ Seed cards, tags, and default data
 ├── configs/                 # ⚙️ Static configuration files

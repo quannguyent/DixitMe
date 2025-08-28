@@ -14,15 +14,15 @@ DixitMe brings the beloved board game Dixit to the web with:
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Go 1.21+
+- Go 1.21+ 
 - Node.js 18+
 - Docker & Docker Compose
 
 ### Setup & Run
-```bash
+   ```bash
 # 1. Clone and setup environment
-git clone <repository-url>
-cd DixitMe
+   git clone <repository-url>
+   cd DixitMe
 cp configs/config.env.example .env
 
 # 2. Start dependencies
@@ -33,7 +33,7 @@ go mod download
 cd web && npm install && cd ..
 
 # 4. Start backend
-go run cmd/server/main.go
+   go run cmd/server/main.go
 
 # 5. Start frontend (new terminal)
 cd web && npm start
@@ -67,6 +67,7 @@ DixitMe/
 │   ├── services/game/       # Core game mechanics
 │   ├── transport/           # HTTP & WebSocket handlers
 │   ├── models/              # Database models
+│   ├── utils/               # Common utility functions & input validation
 │   └── ...                  # Other backend packages
 ├── web/                     # React frontend
 │   ├── src/components/      # UI components
