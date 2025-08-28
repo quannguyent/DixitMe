@@ -14,6 +14,7 @@ type ConnectionMessage struct {
 const (
 	ClientMessageJoinGame       = "join_game"
 	ClientMessageCreateGame     = "create_game"
+	ClientMessageAddBot         = "add_bot"
 	ClientMessageStartGame      = "start_game"
 	ClientMessageSubmitClue     = "submit_clue"
 	ClientMessageSubmitCard     = "submit_card"
@@ -32,6 +33,11 @@ type JoinGamePayload struct {
 type CreateGamePayload struct {
 	RoomCode   string `json:"room_code"`
 	PlayerName string `json:"player_name"`
+}
+
+type AddBotPayload struct {
+	RoomCode string `json:"room_code"`
+	BotLevel string `json:"bot_level"`
 }
 
 type StartGamePayload struct {

@@ -54,27 +54,7 @@ const GameBoard: React.FC = () => {
     }
   };
 
-  const getGamePhase = () => {
-    if (!gameState?.current_round) return 'Waiting for game to start...';
-    
-    const round = gameState.current_round;
-    const isStoryteller = currentPlayer?.id === round.storyteller_id;
-    
-    switch (round.status) {
-      case 'storytelling':
-        return isStoryteller ? 'Choose a card and give a clue' : 'Waiting for storyteller...';
-      case 'submitting':
-        return isStoryteller ? 'Waiting for other players to submit cards...' : 'Choose a card that fits the clue';
-      case 'voting':
-        return isStoryteller ? 'Waiting for players to vote...' : 'Vote for the storyteller\'s card';
-      case 'scoring':
-        return 'Calculating scores...';
-      case 'completed':
-        return 'Round completed!';
-      default:
-        return 'Unknown phase';
-    }
-  };
+
 
   const getStorytellerName = () => {
     if (!gameState?.current_round?.storyteller_id) return '';
@@ -115,7 +95,8 @@ const GameBoard: React.FC = () => {
         </div>
         
         <div className="round-info">
-          <div className="round-number">Round {gameState.round_number} of {gameState.max_rounds}</div>
+          <div className="round-number">Round {gameState.round_number}</div>
+          <div className="game-rule">First to 30 points wins!</div>
           {gameState.current_round && (
             <div className="storyteller-info">
               Storyteller: <strong>{getStorytellerName()}</strong>

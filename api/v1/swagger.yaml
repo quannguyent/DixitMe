@@ -1,5 +1,160 @@
 basePath: /api/v1
 definitions:
+  auth.AuthResponse:
+    properties:
+      message:
+        type: string
+      success:
+        type: boolean
+      token:
+        type: string
+      type:
+        description: '"registered", "guest"'
+        type: string
+      user: {}
+    type: object
+  auth.GoogleLoginRequest:
+    properties:
+      access_token:
+        type: string
+    required:
+    - access_token
+    type: object
+  auth.GuestLoginRequest:
+    properties:
+      name:
+        type: string
+    type: object
+  auth.LoginRequest:
+    properties:
+      email_or_username:
+        type: string
+      password:
+        type: string
+    required:
+    - email_or_username
+    - password
+    type: object
+  auth.RefreshTokenRequest:
+    properties:
+      token:
+        type: string
+    required:
+    - token
+    type: object
+  auth.RegisterRequest:
+    properties:
+      display_name:
+        maxLength: 100
+        minLength: 1
+        type: string
+      email:
+        type: string
+      password:
+        minLength: 8
+        type: string
+      username:
+        maxLength: 50
+        minLength: 3
+        type: string
+    required:
+    - display_name
+    - email
+    - password
+    - username
+    type: object
+  handlers.AddBotRequest:
+    properties:
+      bot_level:
+        description: easy, medium, hard
+        type: string
+      room_code:
+        type: string
+    required:
+    - room_code
+    type: object
+  handlers.BotStatsResponse:
+    properties:
+      active_bots:
+        type: integer
+      bot_performance:
+        additionalProperties: true
+        type: object
+      bots_by_level:
+        additionalProperties:
+          format: int64
+          type: integer
+        type: object
+      total_bots:
+        type: integer
+    type: object
+  handlers.CardWithTagsResponse:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      extension:
+        type: string
+      id:
+        type: integer
+      image_url:
+        type: string
+      is_active:
+        type: boolean
+      tags:
+        items:
+          $ref: '#/definitions/handlers.TagResponse'
+        type: array
+      title:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  handlers.CardsListResponse:
+    properties:
+      cards:
+        items:
+          $ref: '#/definitions/handlers.CardWithTagsResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/handlers.PaginationResponse'
+    type: object
+  handlers.ChatHistoryResponse:
+    properties:
+      messages:
+        items:
+          $ref: '#/definitions/models.ChatMessage'
+        type: array
+      total:
+        type: integer
+    type: object
+  handlers.ChatStatsResponse:
+    properties:
+      active_games:
+        type: integer
+      messages_this_week:
+        type: integer
+      messages_today:
+        type: integer
+      total_messages:
+        type: integer
+    type: object
+  handlers.CreateCardRequest:
+    properties:
+      description:
+        type: string
+      extension:
+        type: string
+      tag_ids:
+        items:
+          type: integer
+        type: array
+      title:
+        type: string
+    required:
+    - title
+    type: object
   handlers.CreatePlayerRequest:
     properties:
       name:
@@ -11,6 +166,40 @@ definitions:
     properties:
       player:
         $ref: '#/definitions/models.Player'
+    type: object
+  handlers.CreateTagRequest:
+    properties:
+      category:
+        type: string
+      color:
+        type: string
+      description:
+        type: string
+      name:
+        type: string
+      slug:
+        type: string
+      weight:
+        type: number
+    required:
+    - name
+    type: object
+  handlers.DatabaseStatsResponse:
+    properties:
+      stats: {}
+    type: object
+  handlers.GameHistoryResponse:
+    properties:
+      games:
+        items:
+          $ref: '#/definitions/models.GameHistory'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
     type: object
   handlers.GetGameResponse:
     properties:
@@ -25,6 +214,122 @@ definitions:
         items:
           $ref: '#/definitions/models.Game'
         type: array
+    type: object
+  handlers.LeaveGameRequest:
+    properties:
+      room_code:
+        type: string
+    required:
+    - room_code
+    type: object
+  handlers.ListTagsResponse:
+    properties:
+      tags:
+        items:
+          $ref: '#/definitions/models.Tag'
+        type: array
+    type: object
+  handlers.PaginationResponse:
+    properties:
+      limit:
+        type: integer
+      page:
+        type: integer
+      pages:
+        type: integer
+      total:
+        type: integer
+    type: object
+  handlers.PlayerStatsResponse:
+    properties:
+      average_score:
+        type: number
+      favorite_role:
+        type: string
+      games_as_storyteller:
+        type: integer
+      games_won:
+        type: integer
+      player_id:
+        type: string
+      total_games:
+        type: integer
+      total_score:
+        type: integer
+      win_rate:
+        type: number
+    type: object
+  handlers.RemovePlayerRequest:
+    properties:
+      player_id:
+        type: string
+      room_code:
+        type: string
+    required:
+    - player_id
+    - room_code
+    type: object
+  handlers.SendChatMessageRequest:
+    properties:
+      game_id:
+        type: string
+      message:
+        type: string
+      message_type:
+        description: chat, system, emote
+        type: string
+    required:
+    - game_id
+    - message
+    type: object
+  handlers.TagResponse:
+    properties:
+      category:
+        type: string
+      color:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      slug:
+        type: string
+      weight:
+        type: number
+    type: object
+  models.AuthType:
+    enum:
+    - guest
+    - password
+    - google
+    type: string
+    x-enum-varnames:
+    - AuthTypeGuest
+    - AuthTypePassword
+    - AuthTypeGoogle
+  models.Card:
+    properties:
+      created_at:
+        type: string
+      description:
+        type: string
+      extension:
+        type: string
+      id:
+        type: integer
+      image_url:
+        type: string
+      is_active:
+        type: boolean
+      tags:
+        description: Relationships
+        items:
+          $ref: '#/definitions/models.CardTag'
+        type: array
+      title:
+        type: string
+      updated_at:
+        type: string
     type: object
   models.CardSubmission:
     properties:
@@ -42,6 +347,50 @@ definitions:
         - $ref: '#/definitions/models.GameRound'
         description: Relationships
       round_id:
+        type: string
+    type: object
+  models.CardTag:
+    properties:
+      card:
+        allOf:
+        - $ref: '#/definitions/models.Card'
+        description: Relationships
+      card_id:
+        type: integer
+      tag:
+        $ref: '#/definitions/models.Tag'
+      tag_id:
+        type: integer
+      weight:
+        description: How strongly this tag applies to this card
+        type: number
+    type: object
+  models.ChatMessage:
+    properties:
+      created_at:
+        type: string
+      game:
+        allOf:
+        - $ref: '#/definitions/models.Game'
+        description: Relationships
+      game_id:
+        type: string
+      id:
+        type: string
+      is_visible:
+        description: For moderation
+        type: boolean
+      message:
+        type: string
+      message_type:
+        description: chat, system, emote
+        type: string
+      phase:
+        description: lobby, storytelling, submitting, voting, scoring
+        type: string
+      player:
+        $ref: '#/definitions/models.Player'
+      player_id:
         type: string
     type: object
   models.Game:
@@ -165,15 +514,37 @@ definitions:
     - GameStatusAbandoned
   models.Player:
     properties:
+      auth_type:
+        $ref: '#/definitions/models.AuthType'
+      bot_level:
+        description: easy, medium, hard
+        type: string
       created_at:
         type: string
       id:
         type: string
       name:
         type: string
+      type:
+        $ref: '#/definitions/models.PlayerType'
       updated_at:
         type: string
+      user:
+        allOf:
+        - $ref: '#/definitions/models.User'
+        description: Relationships
+      user_id:
+        description: NULL for guest players
+        type: string
     type: object
+  models.PlayerType:
+    enum:
+    - human
+    - bot
+    type: string
+    x-enum-varnames:
+    - PlayerTypeHuman
+    - PlayerTypeBot
   models.RoundStatus:
     enum:
     - storytelling
@@ -188,6 +559,61 @@ definitions:
     - RoundStatusVoting
     - RoundStatusScoring
     - RoundStatusCompleted
+  models.Tag:
+    properties:
+      cards:
+        description: Relationships
+        items:
+          $ref: '#/definitions/models.Card'
+        type: array
+      category:
+        description: Group tags by category
+        type: string
+      color:
+        description: Hex color for UI
+        type: string
+      created_at:
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      name:
+        type: string
+      slug:
+        type: string
+      updated_at:
+        type: string
+      weight:
+        description: For weighted random selection
+        type: number
+    type: object
+  models.User:
+    properties:
+      auth_type:
+        $ref: '#/definitions/models.AuthType'
+      avatar:
+        description: Profile picture URL
+        type: string
+      created_at:
+        type: string
+      display_name:
+        type: string
+      email:
+        type: string
+      id:
+        type: string
+      is_active:
+        type: boolean
+      last_login_at:
+        type: string
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
   models.Vote:
     properties:
       card_id:
@@ -220,11 +646,122 @@ info:
   title: DixitMe API
   version: "1.0"
 paths:
-  /cards:
+  /admin/cleanup:
+    post:
+      consumes:
+      - application/json
+      description: Remove games that are completed or abandoned and older than 24
+        hours
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Cleanup old games
+      tags:
+      - admin
+  /admin/seed:
+    post:
+      consumes:
+      - application/json
+      description: Initialize database with default cards and tags
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Seed database
+      tags:
+      - admin
+  /admin/seed/cards:
+    post:
+      consumes:
+      - application/json
+      description: Initialize database with default cards
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Seed cards
+      tags:
+      - admin
+  /admin/seed/tags:
+    post:
+      consumes:
+      - application/json
+      description: Initialize database with default tags
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Seed tags
+      tags:
+      - admin
+  /admin/stats:
     get:
       consumes:
       - application/json
-      description: Get the list of all available cards in the game
+      description: Get comprehensive statistics about the database content
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.DatabaseStatsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get database statistics
+      tags:
+      - admin
+  /api/v1/games/{room_code}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete an entire game (only allowed by lobby manager/creator)
+      parameters:
+      - description: Room code
+        in: path
+        name: room_code
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -232,39 +769,616 @@ paths:
           description: OK
           schema:
             additionalProperties:
-              items:
-                additionalProperties: true
-                type: object
-              type: array
+              type: string
             type: object
-      summary: Get available cards
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Delete game
       tags:
-      - cards
-  /games:
+      - games
+  /api/v1/games/add-bot:
+    post:
+      consumes:
+      - application/json
+      description: Add an AI bot player to an existing game
+      parameters:
+      - description: Bot information
+        in: body
+        name: bot
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.AddBotRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Add bot to game
+      tags:
+      - games
+  /api/v1/games/leave:
+    post:
+      consumes:
+      - application/json
+      description: Allow a player to leave a game they are currently in
+      parameters:
+      - description: Leave game information
+        in: body
+        name: leave
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.LeaveGameRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Leave game
+      tags:
+      - games
+  /api/v1/games/remove-player:
+    delete:
+      consumes:
+      - application/json
+      description: Remove a player or bot from an existing game (only in waiting status)
+      parameters:
+      - description: Player removal information
+        in: body
+        name: player
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.RemovePlayerRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Remove player from game
+      tags:
+      - games
+  /auth/google:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user with Google OAuth access token
+      parameters:
+      - description: Google access token
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.GoogleLoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.AuthResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "503":
+          description: Service Unavailable
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Login with Google OAuth
+      tags:
+      - auth
+  /auth/guest:
+    post:
+      consumes:
+      - application/json
+      description: Create a guest session without registration
+      parameters:
+      - description: Guest name (optional)
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.GuestLoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.AuthResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Guest login
+      tags:
+      - auth
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticate user with email/username and password
+      parameters:
+      - description: Login credentials
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.AuthResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Login with email/password
+      tags:
+      - auth
+  /auth/logout:
+    post:
+      description: Logout user and invalidate session
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Logout
+      tags:
+      - auth
+  /auth/me:
+    get:
+      description: Get current authenticated user information
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Get current user
+      tags:
+      - auth
+  /auth/refresh:
+    post:
+      consumes:
+      - application/json
+      description: Refresh authentication token
+      parameters:
+      - description: Token to refresh
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.RefreshTokenRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/auth.AuthResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Refresh token
+      tags:
+      - auth
+  /auth/register:
+    post:
+      consumes:
+      - application/json
+      description: Create a new user account with email and password
+      parameters:
+      - description: Registration data
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/auth.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/auth.AuthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "409":
+          description: Conflict
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Register with email/password
+      tags:
+      - auth
+  /auth/status:
+    get:
+      description: Get current authentication configuration and available methods
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get authentication status
+      tags:
+      - auth
+  /auth/validate:
+    get:
+      description: Validate authentication token
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Validate token
+      tags:
+      - auth
+  /bots/stats:
     get:
       consumes:
       - application/json
-      description: Get a paginated list of all games with optional status filter
+      description: Get statistics about AI bot performance and usage
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.BotStatsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get bot statistics
+      tags:
+      - bots
+  /cards:
+    get:
+      description: Get a list of cards with optional tag filtering
       parameters:
+      - description: Comma-separated tag IDs for filtering
+        in: query
+        name: tags
+        type: string
       - default: 1
         description: Page number
         in: query
         name: page
         type: integer
-      - default: 10
+      - default: 20
         description: Items per page
         in: query
         name: limit
         type: integer
-      - description: Game status filter
-        enum:
-        - waiting
-        - in_progress
-        - completed
-        - abandoned
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.CardsListResponse'
+      summary: List cards with filtering
+      tags:
+      - cards
+    post:
+      consumes:
+      - application/json
+      description: Create a new card with optional tags
+      parameters:
+      - description: Card data
+        in: body
+        name: card
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CreateCardRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Card'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create new card
+      tags:
+      - cards
+  /cards/{card_id}:
+    get:
+      description: Get a card by ID with its associated tags
+      parameters:
+      - description: Card ID
+        in: path
+        name: card_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.CardWithTagsResponse'
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get card with tags
+      tags:
+      - cards
+  /cards/{card_id}/image:
+    post:
+      consumes:
+      - multipart/form-data
+      description: Upload an image for a card to MinIO storage
+      parameters:
+      - description: Card ID
+        in: path
+        name: card_id
+        required: true
+        type: integer
+      - description: Card image file
+        in: formData
+        name: image
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Upload card image
+      tags:
+      - cards
+  /chat/history:
+    get:
+      consumes:
+      - application/json
+      description: Get chat message history for a specific game
+      parameters:
+      - description: Game ID
         in: query
-        name: status
+        name: game_id
+        required: true
         type: string
+      - default: 50
+        description: Number of messages to retrieve
+        in: query
+        name: limit
+        type: integer
+      - default: 0
+        description: Number of messages to skip
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ChatHistoryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get chat history
+      tags:
+      - chat
+  /chat/send:
+    post:
+      consumes:
+      - application/json
+      description: Send a chat message to a specific game
+      parameters:
+      - description: Chat message data
+        in: body
+        name: message
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.SendChatMessageRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Send chat message
+      tags:
+      - chat
+  /chat/stats:
+    get:
+      consumes:
+      - application/json
+      description: Get statistics about chat usage across all games
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ChatStatsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get chat statistics
+      tags:
+      - chat
+  /games:
+    get:
+      consumes:
+      - application/json
+      description: Get a list of all games with their current status
       produces:
       - application/json
       responses:
@@ -278,16 +1392,16 @@ paths:
             additionalProperties:
               type: string
             type: object
-      summary: List all games
+      summary: Get all games
       tags:
       - games
   /games/{room_code}:
     get:
       consumes:
       - application/json
-      description: Get game information and status by room code
+      description: Get game information and check if it's currently live
       parameters:
-      - description: Room Code
+      - description: Game room code
         in: path
         name: room_code
         required: true
@@ -334,12 +1448,12 @@ paths:
             type: object
       summary: Health check
       tags:
-      - system
+      - health
   /player/{player_id}/history:
     get:
       consumes:
       - application/json
-      description: Get paginated game history for a specific player
+      description: Get a list of games played by a specific player
       parameters:
       - description: Player ID
         format: uuid
@@ -353,7 +1467,7 @@ paths:
         name: page
         type: integer
       - default: 10
-        description: Items per page
+        description: Number of games per page
         in: query
         name: limit
         type: integer
@@ -363,13 +1477,15 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties:
-              items:
-                $ref: '#/definitions/models.GameHistory'
-              type: array
-            type: object
+            $ref: '#/definitions/handlers.GameHistoryResponse'
         "400":
           description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
           schema:
             additionalProperties:
               type: string
@@ -380,14 +1496,15 @@ paths:
             additionalProperties:
               type: string
             type: object
-      summary: Get player game history
+      summary: Get player's game history
       tags:
       - players
   /player/{player_id}/stats:
     get:
       consumes:
       - application/json
-      description: Get comprehensive statistics for a specific player
+      description: Get detailed statistics for a player including games played, win
+        rate, etc.
       parameters:
       - description: Player ID
         format: uuid
@@ -401,10 +1518,21 @@ paths:
         "200":
           description: OK
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/handlers.PlayerStatsResponse'
         "400":
           description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "500":
+          description: Internal Server Error
           schema:
             additionalProperties:
               type: string
@@ -482,6 +1610,60 @@ paths:
       summary: Get player by ID
       tags:
       - players
+  /tags:
+    get:
+      description: Get a list of all available tags for card categorization
+      parameters:
+      - description: Filter by category
+        in: query
+        name: category
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ListTagsResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: List all tags
+      tags:
+      - tags
+    post:
+      consumes:
+      - application/json
+      description: Create a new tag for card categorization
+      parameters:
+      - description: Tag data
+        in: body
+        name: tag
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CreateTagRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Tag'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Create new tag
+      tags:
+      - tags
 schemes:
 - http
 - https

@@ -118,6 +118,9 @@ func setupGameRoutes(api *gin.RouterGroup, deps *RouterDependencies) {
 		gameGroup.GET("", deps.GameHandlers.GetGames)
 		gameGroup.GET("/:room_code", deps.GameHandlers.GetGame)
 		gameGroup.POST("/add-bot", deps.GameHandlers.AddBotToGame)
+		gameGroup.DELETE("/remove-player", deps.GameHandlers.RemovePlayerFromGame)
+		gameGroup.DELETE("/:room_code", deps.GameHandlers.DeleteGame)
+		gameGroup.POST("/leave", deps.GameHandlers.LeaveGame)
 	}
 }
 

@@ -24,6 +24,7 @@ const (
 	MessageTypeVoteSubmitted  MessageType = "vote_submitted"
 	MessageTypeRoundCompleted MessageType = "round_completed"
 	MessageTypeGameCompleted  MessageType = "game_completed"
+	MessageTypeGameDeleted    MessageType = "game_deleted"
 	MessageTypeError          MessageType = "error"
 	MessageTypeGameState      MessageType = "game_state"
 	MessageTypeChatMessage    MessageType = "chat_message"
@@ -71,6 +72,11 @@ type RoundCompletedPayload struct {
 type GameCompletedPayload struct {
 	FinalScores map[uuid.UUID]int `json:"final_scores"`
 	Winner      uuid.UUID         `json:"winner"`
+}
+
+type GameDeletedPayload struct {
+	RoomCode string `json:"room_code"`
+	Message  string `json:"message"`
 }
 
 type ErrorPayload struct {

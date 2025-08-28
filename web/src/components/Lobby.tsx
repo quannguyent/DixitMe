@@ -3,6 +3,7 @@ import { useGameStore } from '../store/gameStore';
 import { useAuthStore } from '../store/authStore';
 import UserInfo from './UserInfo';
 import Chat from './Chat';
+import GameControls from './GameControls';
 import styles from './Lobby.module.css';
 
 const Lobby: React.FC = () => {
@@ -22,6 +23,7 @@ const Lobby: React.FC = () => {
     createGame,
     joinGame,
     addBot,
+    removePlayer,
     startGame,
     setError,
   } = useGameStore();
@@ -104,17 +106,53 @@ const Lobby: React.FC = () => {
             </div>
           </div>
 
+          <GameControls
+            roomCode={gameState.room_code}
+            isLobbyManager={Object.values(gameState.players)[0]?.id === user?.id}
+            onGameDeleted={() => {
+              // Handle game deletion - redirect to home
+              window.location.href = '/';
+            }}
+            onPlayerLeft={() => {
+              // Handle player leaving - redirect to home
+              window.location.href = '/';
+            }}
+          />
+
           <div className="players-section">
             <h3>Players ({Object.keys(gameState.players).length}/6)</h3>
             <div className="players-list">
-              {Object.values(gameState.players).map((player) => (
-                <div key={player.id} className="player-item">
-                  <span className="player-name">{player.name}</span>
-                  <span className={`player-status ${player.is_connected ? 'online' : 'offline'}`}>
-                    {player.is_connected ? '🟢' : '🔴'}
-                  </span>
-                </div>
-              ))}
+              {Object.values(gameState.players).map((player, index) => {
+                const isCurrentPlayer = player.id === user?.id;
+                const isLobbyManager = index === 0; // First player is the lobby manager
+                const canRemove = isLobbyManager && !isCurrentPlayer && gameState.status === 'waiting';
+                
+                return (
+                  <div key={player.id} className="player-item">
+                    <div className="player-info">
+                      <span className="player-name">
+                        {player.name}
+                        {index === 0 && <span className="manager-badge">👑</span>}
+                        {player.is_bot && <span className="bot-badge">🤖</span>}
+                        {isCurrentPlayer && <span className="you-badge">(You)</span>}
+                      </span>
+                      <span className={`player-status ${player.is_connected ? 'online' : 'offline'}`}>
+                        {player.is_connected ? '🟢' : '🔴'}
+                      </span>
+                    </div>
+                    {canRemove && (
+                      <button
+                        className="remove-player-btn"
+                        onClick={() => removePlayer(gameState.room_code, player.id)}
+                        disabled={isLoading}
+                        title={`Remove ${player.name} from the game`}
+                      >
+                        ❌
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
 

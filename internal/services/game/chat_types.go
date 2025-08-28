@@ -8,13 +8,13 @@ import (
 
 // Chat message structures
 type ChatMessagePayload struct {
-	ID          uuid.UUID `json:"id"`
-	PlayerID    uuid.UUID `json:"player_id"`
-	PlayerName  string    `json:"player_name"`
-	Message     string    `json:"message"`
-	MessageType string    `json:"message_type"` // chat, system, emote
-	Phase       string    `json:"phase"`
-	Timestamp   time.Time `json:"timestamp"`
+	ID          uuid.UUID  `json:"id"`
+	PlayerID    *uuid.UUID `json:"player_id"`
+	PlayerName  string     `json:"player_name"`
+	Message     string     `json:"message"`
+	MessageType string     `json:"message_type"` // chat, system, emote
+	Phase       string     `json:"phase"`
+	Timestamp   time.Time  `json:"timestamp"`
 }
 
 type ChatHistoryPayload struct {

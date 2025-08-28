@@ -76,6 +76,9 @@ func handleWebSocketConnection(c *gin.Context, playerID uuid.UUID, userInfo *aut
 		logger.Info("Guest WebSocket connection established", "player_id", playerID)
 	}
 
+	// Register this connection in the game package registry
+	game.RegisterPlayerConnection(playerID, conn)
+
 	// Send initial connection confirmation
 	welcomeMsg := game.GameMessage{
 		Type: "connection_established",
@@ -108,6 +111,7 @@ func handleWebSocketConnection(c *gin.Context, playerID uuid.UUID, userInfo *aut
 	}
 
 	// Clean up on disconnect
+	game.UnregisterPlayerConnection(playerID)
 	handleDisconnect(playerID)
 }
 

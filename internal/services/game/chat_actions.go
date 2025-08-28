@@ -62,7 +62,7 @@ func (m *Manager) SendChatMessage(roomCode string, playerID uuid.UUID, message s
 	chatMessage := models.ChatMessage{
 		ID:          uuid.New(),
 		GameID:      game.ID,
-		PlayerID:    playerID,
+		PlayerID:    &playerID,
 		Message:     strings.TrimSpace(message),
 		MessageType: messageType,
 		Phase:       currentPhase,
@@ -78,7 +78,7 @@ func (m *Manager) SendChatMessage(roomCode string, playerID uuid.UUID, message s
 	// Create payload
 	payload := ChatMessagePayload{
 		ID:          chatMessage.ID,
-		PlayerID:    playerID,
+		PlayerID:    &playerID,
 		PlayerName:  player.Name,
 		Message:     chatMessage.Message,
 		MessageType: chatMessage.MessageType,
@@ -116,9 +116,9 @@ func (m *Manager) GetChatHistory(roomCode string, phase string, limit int) ([]Ch
 	payloads := make([]ChatMessagePayload, 0, len(messages))
 	for _, msg := range messages {
 		var playerName string
-		if msg.PlayerID == uuid.Nil {
+		if msg.PlayerID == nil {
 			playerName = "System"
-		} else if player, exists := game.Players[msg.PlayerID]; exists {
+		} else if player, exists := game.Players[*msg.PlayerID]; exists {
 			playerName = player.Name
 		} else {
 			playerName = "Unknown"
@@ -151,12 +151,11 @@ func (m *Manager) SendSystemMessage(roomCode string, message string) error {
 		currentPhase = string(game.CurrentRound.Status)
 	}
 
-	// Create system message with a system player ID (using nil UUID)
-	systemPlayerID := uuid.Nil
+	// Create system message with nil player ID (for system messages)
 	chatMessage := models.ChatMessage{
 		ID:          uuid.New(),
 		GameID:      game.ID,
-		PlayerID:    systemPlayerID,
+		PlayerID:    nil,
 		Message:     message,
 		MessageType: "system",
 		Phase:       currentPhase,
@@ -173,7 +172,7 @@ func (m *Manager) SendSystemMessage(roomCode string, message string) error {
 	// Create payload
 	payload := ChatMessagePayload{
 		ID:          chatMessage.ID,
-		PlayerID:    systemPlayerID,
+		PlayerID:    nil,
 		PlayerName:  "System",
 		Message:     chatMessage.Message,
 		MessageType: chatMessage.MessageType,

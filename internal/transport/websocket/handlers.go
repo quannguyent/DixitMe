@@ -20,6 +20,8 @@ func handleMessage(conn *websocket.Conn, playerID uuid.UUID, msg ConnectionMessa
 		return handleCreateGame(conn, playerID, msg, manager)
 	case ClientMessageJoinGame:
 		return handleJoinGame(conn, playerID, msg, manager)
+	case ClientMessageAddBot:
+		return handleAddBot(msg, manager, playerID)
 	case ClientMessageStartGame:
 		return handleStartGame(msg, manager, playerID)
 	case ClientMessageSubmitClue:
@@ -85,6 +87,26 @@ func handleJoinGame(conn *websocket.Conn, playerID uuid.UUID, msg ConnectionMess
 		Type:    game.MessageTypeGameState,
 		Payload: game.GameStatePayload{GameState: gameState},
 	})
+}
+
+// handleAddBot handles add bot requests
+func handleAddBot(msg ConnectionMessage, manager *game.Manager, playerID uuid.UUID) error {
+	var payload AddBotPayload
+	if err := json.Unmarshal(msg.Payload, &payload); err != nil {
+		return err
+	}
+
+	// Validate bot level
+	validLevels := map[string]bool{"easy": true, "medium": true, "hard": true}
+	if payload.BotLevel == "" {
+		payload.BotLevel = "medium" // Default level
+	}
+	if !validLevels[payload.BotLevel] {
+		return fmt.Errorf("invalid bot level. Must be easy, medium, or hard")
+	}
+
+	_, err := manager.AddBot(payload.RoomCode, payload.BotLevel)
+	return err
 }
 
 // handleStartGame handles game start requests

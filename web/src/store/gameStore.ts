@@ -28,11 +28,14 @@ interface GameStore {
   createGame: (roomCode: string, playerName: string) => void;
   joinGame: (roomCode: string, playerName: string) => void;
   addBot: (roomCode: string, botName?: string, difficulty?: string) => void;
+  removePlayer: (roomCode: string, playerId: string) => Promise<void>;
+  leaveGame: (roomCode: string) => Promise<void>;
+  leaveGameViaWebSocket: (roomCode: string) => void;
+  deleteGame: (roomCode: string) => Promise<void>;
   startGame: (roomCode: string) => void;
   submitClue: (roomCode: string, clue: string, cardId: number) => void;
   submitCard: (roomCode: string, cardId: number) => void;
   submitVote: (roomCode: string, cardId: number) => void;
-  leaveGame: (roomCode: string) => void;
   sendChatMessage: (roomCode: string, message: string, messageType?: string) => void;
   getChatHistory: (roomCode: string, phase?: string, limit?: number) => void;
   setGameState: (gameState: GameState) => void;
@@ -46,6 +49,10 @@ interface GameStore {
 const WEBSOCKET_URL = process.env.NODE_ENV === 'production' 
   ? `wss://${window.location.host}/ws`
   : 'ws://localhost:8080/ws';
+
+const API_BASE_URL = process.env.NODE_ENV === 'production'
+  ? ''
+  : 'http://localhost:8080';
 
 export const useGameStore = create<GameStore>()(
   devtools(
@@ -177,35 +184,119 @@ export const useGameStore = create<GameStore>()(
         set({ isLoading: true, error: null }, false, 'joining-game');
       },
 
-      addBot: async (roomCode, botName = 'Bot', difficulty = 'medium') => {
+      addBot: (roomCode: string, botName = 'Bot', difficulty = 'medium') => {
+        const state = get();
+        if (!state.socket || !state.isConnected) {
+          set({ error: 'Not connected to server' }, false, 'add-bot-error');
+          return;
+        }
+
+        const message = {
+          type: MessageTypes.ADD_BOT,
+          payload: { 
+            room_code: roomCode, 
+            bot_level: difficulty 
+          }
+        };
+
+        state.socket.send(JSON.stringify(message));
+        set({ isLoading: true, error: null }, false, 'adding-bot');
+      },
+
+      // Remove player/bot from game
+      removePlayer: async (roomCode: string, playerId: string) => {
         try {
-          set({ isLoading: true, error: null }, false, 'adding-bot');
-          
-          const response = await fetch('/api/v1/games/add-bot', {
-            method: 'POST',
+          set({ isLoading: true, error: null }, false, 'removing-player');
+
+          const response = await fetch(`${API_BASE_URL}/api/v1/games/remove-player`, {
+            method: 'DELETE',
             headers: {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
               room_code: roomCode,
-              bot_name: botName,
-              difficulty: difficulty
+              player_id: playerId
             }),
           });
 
           if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.error || 'Failed to add bot');
+            throw new Error(errorData.error || 'Failed to remove player');
           }
 
-          // Bot added successfully - the server will send a game state update via WebSocket
-          set({ isLoading: false }, false, 'bot-added');
+          // Player removed successfully - the server will send a game state update via WebSocket
+          set({ isLoading: false }, false, 'player-removed');
         } catch (error) {
-          console.error('Error adding bot:', error);
+          console.error('Error removing player:', error);
           set({ 
-            error: error instanceof Error ? error.message : 'Failed to add bot',
+            error: error instanceof Error ? error.message : 'Failed to remove player',
             isLoading: false 
-          }, false, 'add-bot-error');
+          }, false, 'player-remove-error');
+        }
+      },
+
+      // Leave game (for current player)
+      leaveGame: async (roomCode: string) => {
+        try {
+          set({ isLoading: true, error: null }, false, 'leaving-game');
+
+          const response = await fetch(`${API_BASE_URL}/api/v1/games/leave`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              room_code: roomCode
+            }),
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to leave game');
+          }
+
+          // Successfully left game - redirect to lobby or home
+          set({ 
+            gameState: null,
+            isLoading: false 
+          }, false, 'left-game');
+        } catch (error) {
+          console.error('Error leaving game:', error);
+          set({ 
+            error: error instanceof Error ? error.message : 'Failed to leave game',
+            isLoading: false 
+          }, false, 'leave-game-error');
+        }
+      },
+
+      // Delete game (for lobby manager/creator)
+      deleteGame: async (roomCode: string) => {
+        try {
+          set({ isLoading: true, error: null }, false, 'deleting-game');
+
+          const response = await fetch(`${API_BASE_URL}/api/v1/games/${roomCode}`, {
+            method: 'DELETE',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Failed to delete game');
+          }
+
+          // Successfully deleted game - redirect to home
+          set({ 
+            gameState: null,
+            isLoading: false 
+          }, false, 'game-deleted');
+        } catch (error) {
+          console.error('Error deleting game:', error);
+          set({ 
+            error: error instanceof Error ? error.message : 'Failed to delete game',
+            isLoading: false 
+          }, false, 'delete-game-error');
         }
       },
 
@@ -257,7 +348,7 @@ export const useGameStore = create<GameStore>()(
         state.socket.send(JSON.stringify(message));
       },
 
-      leaveGame: (roomCode) => {
+      leaveGameViaWebSocket: (roomCode) => {
         const state = get();
         if (!state.socket || !state.isConnected) return;
 

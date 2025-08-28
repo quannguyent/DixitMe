@@ -56,7 +56,7 @@ func SendChatMessage(c *gin.Context) {
 
 	chatMessage := models.ChatMessage{
 		GameID:      gameID,
-		PlayerID:    playerID,
+		PlayerID:    &playerID,
 		Message:     req.Message,
 		MessageType: req.MessageType,
 		Phase:       "lobby", // TODO: Get actual game phase

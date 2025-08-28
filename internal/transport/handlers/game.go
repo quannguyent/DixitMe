@@ -5,8 +5,10 @@ import (
 
 	"dixitme/internal/database"
 	"dixitme/internal/models"
+	"dixitme/internal/services/game"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // GameHandlers handles game-related HTTP requests
@@ -90,7 +92,7 @@ func (h *GameHandlers) GetGames(c *gin.Context) {
 // @Failure 400 {object} map[string]string
 // @Failure 404 {object} map[string]string
 // @Failure 500 {object} map[string]string
-// @Router /games/add-bot [post]
+// @Router /api/v1/games/add-bot [post]
 func (h *GameHandlers) AddBotToGame(c *gin.Context) {
 	var req AddBotRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -111,8 +113,24 @@ func (h *GameHandlers) AddBotToGame(c *gin.Context) {
 	// Get game and add bot
 	liveGame := h.deps.GameService.GetGame(req.RoomCode)
 	if liveGame == nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Game not found"})
-		return
+		// Game not in memory, try to load from database
+		db := database.GetDB()
+		var dbGame models.Game
+		if err := db.Where("room_code = ? AND status IN ?", req.RoomCode, []string{"waiting", "in_progress"}).
+			Preload("Players.Player").
+			First(&dbGame).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Game not found"})
+			return
+		}
+
+		// Try to load the game into memory using the game manager
+		gameManager := h.deps.GameService.(*game.Manager)
+		gameState := gameManager.LoadGameFromDatabase(&dbGame)
+		if gameState == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load game"})
+			return
+		}
+		liveGame = gameState
 	}
 
 	// Check if game is in waiting state (can only add bots before game starts)
@@ -210,4 +228,176 @@ func (h *GameHandlers) GetBotStats(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, stats)
+}
+
+// RemovePlayerFromGame removes a player or bot from an existing game
+// @Summary Remove player from game
+// @Description Remove a player or bot from an existing game (only in waiting status)
+// @Tags games
+// @Accept json
+// @Produce json
+// @Param player body RemovePlayerRequest true "Player removal information"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/games/remove-player [delete]
+func (h *GameHandlers) RemovePlayerFromGame(c *gin.Context) {
+	var req RemovePlayerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Parse player ID
+	playerID, err := uuid.Parse(req.PlayerID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid player ID format"})
+		return
+	}
+
+	// Get game and remove player
+	liveGame := h.deps.GameService.GetGame(req.RoomCode)
+	if liveGame == nil {
+		// Game not in memory, try to load from database
+		db := database.GetDB()
+		var dbGame models.Game
+		if err := db.Where("room_code = ? AND status IN ?", req.RoomCode, []string{"waiting", "in_progress"}).
+			Preload("Players.Player").
+			First(&dbGame).Error; err != nil {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Game not found"})
+			return
+		}
+
+		// Try to load the game into memory using the game manager
+		gameManager := h.deps.GameService.(*game.Manager)
+		gameState := gameManager.LoadGameFromDatabase(&dbGame)
+		if gameState == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to load game"})
+			return
+		}
+		liveGame = gameState
+	}
+
+	// Check if game is in waiting state (can only remove players before game starts)
+	if liveGame.Status != "waiting" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Cannot remove players from a game that has already started"})
+		return
+	}
+
+	// Check if player exists in the game
+	player, exists := liveGame.Players[playerID]
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Player not found in game"})
+		return
+	}
+
+	// Remove player using the game service
+	gameManager := h.deps.GameService.(*game.Manager)
+	_, err = gameManager.RemovePlayer(req.RoomCode, playerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":     "Player removed successfully",
+		"room_code":   req.RoomCode,
+		"player_id":   req.PlayerID,
+		"player_name": player.Name,
+		"is_bot":      player.IsBot,
+	})
+}
+
+// LeaveGame allows a player to leave a game
+// @Summary Leave game
+// @Description Allow a player to leave a game they are currently in
+// @Tags games
+// @Accept json
+// @Produce json
+// @Param leave body LeaveGameRequest true "Leave game information"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/games/leave [post]
+func (h *GameHandlers) LeaveGame(c *gin.Context) {
+	var req LeaveGameRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Get player ID from context (set by auth middleware)
+	playerIDInterface, exists := c.Get("player_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Player ID not found in context"})
+		return
+	}
+
+	playerID, ok := playerIDInterface.(uuid.UUID)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid player ID format"})
+		return
+	}
+
+	// Use the game service to leave the game
+	gameManager := h.deps.GameService.(*game.Manager)
+	updatedGame, err := gameManager.LeaveGame(req.RoomCode, playerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":      "Successfully left the game",
+		"room_code":    req.RoomCode,
+		"player_count": len(updatedGame.Players),
+	})
+}
+
+// DeleteGame allows a lobby manager to delete an entire game
+// @Summary Delete game
+// @Description Delete an entire game (only allowed by lobby manager/creator)
+// @Tags games
+// @Accept json
+// @Produce json
+// @Param room_code path string true "Room code"
+// @Success 200 {object} map[string]string
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /api/v1/games/{room_code} [delete]
+func (h *GameHandlers) DeleteGame(c *gin.Context) {
+	roomCode := c.Param("room_code")
+	if roomCode == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Room code is required"})
+		return
+	}
+
+	// Get player ID from context (set by auth middleware)
+	playerIDInterface, exists := c.Get("player_id")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Player ID not found in context"})
+		return
+	}
+
+	playerID, ok := playerIDInterface.(uuid.UUID)
+	if !ok {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Invalid player ID format"})
+		return
+	}
+
+	// Use the game service to delete the game
+	gameManager := h.deps.GameService.(*game.Manager)
+	err := gameManager.DeleteGame(roomCode, playerID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":   "Game deleted successfully",
+		"room_code": roomCode,
+	})
 }

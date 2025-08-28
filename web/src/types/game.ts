@@ -6,6 +6,8 @@ export interface Player {
   hand: number[];
   is_connected: boolean;
   is_active: boolean;
+  is_bot: boolean;
+  bot_level?: string;
 }
 
 export interface Card {
@@ -91,6 +93,7 @@ export const MessageTypes = {
   // To server
   CREATE_GAME: 'create_game',
   JOIN_GAME: 'join_game',
+  ADD_BOT: 'add_bot',
   START_GAME: 'start_game',
   SUBMIT_CLUE: 'submit_clue',
   SUBMIT_CARD: 'submit_card',

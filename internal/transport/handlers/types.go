@@ -33,6 +33,19 @@ type AddBotRequest struct {
 	BotLevel string `json:"bot_level"` // easy, medium, hard
 }
 
+type RemovePlayerRequest struct {
+	RoomCode string `json:"room_code" binding:"required"`
+	PlayerID string `json:"player_id" binding:"required"`
+}
+
+type LeaveGameRequest struct {
+	RoomCode string `json:"room_code" binding:"required"`
+}
+
+type DeleteGameRequest struct {
+	RoomCode string `json:"room_code"`
+}
+
 // Card related types
 type UploadCardImageResponse struct {
 	Message  string `json:"message"`

@@ -66,17 +66,27 @@ func (m *Manager) PersistGame(ctx context.Context, game *GameState) error {
 func (m *Manager) PersistPlayer(ctx context.Context, player *models.Player) error {
 	log := logger.GetLogger()
 
-	if err := m.db.WithContext(ctx).Create(player).Error; err != nil {
+	// Use FirstOrCreate to handle existing players
+	var existingPlayer models.Player
+	result := m.db.WithContext(ctx).Where("id = ?", player.ID).FirstOrCreate(&existingPlayer, player)
+
+	if result.Error != nil {
 		log.Error("Failed to persist player",
 			"player_id", player.ID,
 			"player_name", player.Name,
-			"error", err)
-		return fmt.Errorf("failed to persist player %s: %w", player.Name, err)
+			"error", result.Error)
+		return fmt.Errorf("failed to persist player %s: %w", player.Name, result.Error)
 	}
 
-	log.Debug("Player persisted successfully",
-		"player_id", player.ID,
-		"player_name", player.Name)
+	if result.RowsAffected > 0 {
+		log.Debug("Player created successfully",
+			"player_id", player.ID,
+			"player_name", player.Name)
+	} else {
+		log.Debug("Player already exists, using existing record",
+			"player_id", player.ID,
+			"player_name", existingPlayer.Name)
+	}
 	return nil
 }
 
@@ -84,6 +94,7 @@ func (m *Manager) PersistGamePlayer(ctx context.Context, gameID uuid.UUID, playe
 	log := logger.GetLogger()
 
 	dbGamePlayer := &models.GamePlayer{
+		ID:       uuid.New(), // Generate a new UUID for the GamePlayer
 		GameID:   gameID,
 		PlayerID: player.ID,
 		Score:    player.Score,
