@@ -69,13 +69,14 @@ func (m *Manager) CreateGame(roomCode string, creatorID uuid.UUID, creatorName s
 
 	// Add creator as first player
 	creator := &Player{
-		ID:          creatorID,
-		Name:        creatorName,
-		Score:       0,
-		Position:    1,
-		Hand:        make([]int, 0),
-		IsConnected: true,
-		IsActive:    true,
+		ID:           creatorID,
+		Name:         creatorName,
+		Score:        0,
+		Position:     1,
+		Hand:         make([]int, 0),
+		IsConnected:  true,
+		IsActive:     true,
+		LastActivity: time.Now(),
 	}
 
 	game.Players[creatorID] = creator
@@ -154,13 +155,14 @@ func (m *Manager) JoinGame(roomCode string, playerID uuid.UUID, playerName strin
 
 	// Create new player
 	player := &Player{
-		ID:          playerID,
-		Name:        playerName,
-		Score:       0,
-		Position:    len(game.Players) + 1,
-		Hand:        make([]int, 0),
-		IsConnected: true,
-		IsActive:    true,
+		ID:           playerID,
+		Name:         playerName,
+		Score:        0,
+		Position:     len(game.Players) + 1,
+		Hand:         make([]int, 0),
+		IsConnected:  true,
+		IsActive:     true,
+		LastActivity: time.Now(),
 	}
 
 	game.Players[playerID] = player
@@ -237,16 +239,17 @@ func (m *Manager) AddBot(roomCode string, botLevel string) (*GameState, error) {
 
 	// Create game player
 	player := &Player{
-		ID:          botID,
-		Name:        botName,
-		Score:       0,
-		Position:    len(game.Players),
-		Hand:        make([]int, 0),
-		Connection:  nil,
-		IsConnected: true, // Bots are always "connected"
-		IsActive:    true,
-		IsBot:       true,
-		BotLevel:    botLevel,
+		ID:           botID,
+		Name:         botName,
+		Score:        0,
+		Position:     len(game.Players),
+		Hand:         make([]int, 0),
+		Connection:   nil,
+		IsConnected:  true, // Bots are always "connected"
+		IsActive:     true,
+		IsBot:        true,
+		BotLevel:     botLevel,
+		LastActivity: time.Now(),
 	}
 
 	game.Players[botID] = player
@@ -300,29 +303,37 @@ func (m *Manager) RemovePlayer(roomCode string, playerID uuid.UUID) (*GameState,
 	game.Lock()
 	defer game.Unlock()
 
-	// Check if game is in waiting state
-	if game.Status != models.GameStatusWaiting {
-		return nil, fmt.Errorf("cannot remove players from a game that has already started")
-	}
-
 	// Check if player exists
 	player, exists := game.Players[playerID]
 	if !exists {
 		return nil, fmt.Errorf("player not found in game")
 	}
 
-	// Remove player from memory
-	delete(game.Players, playerID)
-
 	// Update activity timestamp
 	game.LastActivity = time.Now()
 
-	// Remove from database
-	db := database.GetDB()
-	if err := db.Where("game_id = ? AND player_id = ?", game.ID, playerID).Delete(&models.GamePlayer{}).Error; err != nil {
-		// Rollback memory change
-		game.Players[playerID] = player
-		return nil, fmt.Errorf("failed to remove player from database: %w", err)
+	// Different behavior based on game status
+	if game.Status == models.GameStatusWaiting {
+		// In waiting state: completely remove player
+		delete(game.Players, playerID)
+
+		// Remove from database
+		db := database.GetDB()
+		if err := db.Where("game_id = ? AND player_id = ?", game.ID, playerID).Delete(&models.GamePlayer{}).Error; err != nil {
+			// Rollback memory change
+			game.Players[playerID] = player
+			return nil, fmt.Errorf("failed to remove player from database: %w", err)
+		}
+
+		log.Info("Player completely removed from waiting game", "player_id", playerID, "player_name", player.Name, "room_code", roomCode)
+	} else {
+		// In active game: mark as inactive (AFK) instead of removing
+		player.IsActive = false
+		player.IsConnected = false
+		player.Connection = nil
+		player.UpdateActivity() // Update activity timestamp
+
+		log.Info("Player marked as inactive in active game", "player_id", playerID, "player_name", player.Name, "room_code", roomCode)
 	}
 
 	// Broadcast player left
@@ -336,9 +347,13 @@ func (m *Manager) RemovePlayer(roomCode string, playerID uuid.UUID) (*GameState,
 	if player.IsBot {
 		playerType = "Bot"
 	}
-	m.SendSystemMessage(roomCode, fmt.Sprintf("%s %s left the game", playerType, player.Name))
 
-	log.Info("Player removed from game", "player_id", playerID, "player_name", player.Name, "is_bot", player.IsBot, "room_code", roomCode)
+	statusMessage := "left the game"
+	if game.Status != models.GameStatusWaiting {
+		statusMessage = "went AFK and may be replaced by a bot"
+	}
+
+	m.SendSystemMessage(roomCode, fmt.Sprintf("%s %s %s", playerType, player.Name, statusMessage))
 
 	return game, nil
 }
@@ -467,6 +482,260 @@ func (m *Manager) StartGame(roomCode string, playerID uuid.UUID) error {
 	return nil
 }
 
+// ReplacePlayerWithBot replaces a disconnected or AFK player with a bot
+func (m *Manager) ReplacePlayerWithBot(roomCode string, playerID uuid.UUID, reason string) (*GameState, error) {
+	log := logger.GetLogger()
+
+	game := m.getGame(roomCode)
+	if game == nil {
+		return nil, fmt.Errorf("game not found")
+	}
+
+	game.Lock()
+	defer game.Unlock()
+
+	// Check if player exists
+	player, exists := game.Players[playerID]
+	if !exists {
+		return nil, fmt.Errorf("player not found in game")
+	}
+
+	// Don't replace bots or already replaced players
+	if player.IsBot || player.WasReplaced {
+		return nil, fmt.Errorf("cannot replace bot or already replaced player")
+	}
+
+	// Choose bot difficulty based on game state or default to medium
+	botLevel := "medium"
+	if len(game.Players) <= 3 {
+		botLevel = "easy" // Easier for smaller games
+	}
+
+	// Create bot player
+	botNames := bot.GetBotNames()
+	botName := fmt.Sprintf("Bot-%s", player.Name) // Use original player name as suffix
+
+	// Ensure unique bot name
+	for {
+		nameExists := false
+		for _, p := range game.Players {
+			if p.Name == botName {
+				nameExists = true
+				break
+			}
+		}
+		if !nameExists {
+			break
+		}
+		botName = botNames[rand.Intn(len(botNames))] + "-" + player.Name[:3]
+	}
+
+	botID := uuid.New()
+
+	// Create bot in bot manager
+	botManager := bot.GetBotManager()
+	botPlayer := botManager.CreateBot(botName, bot.BotDifficulty(botLevel))
+	botPlayer.SetGameID(game.ID)
+
+	// Create replacement bot player that inherits from original player
+	replacementBot := &Player{
+		ID:            botID,
+		Name:          botName,
+		Score:         player.Score,    // Keep the same score
+		Position:      player.Position, // Keep the same position
+		Hand:          player.Hand,     // Keep the same cards
+		Connection:    nil,             // Bots don't have connections
+		IsConnected:   true,            // Bots are always "connected"
+		IsActive:      true,
+		IsBot:         true,
+		BotLevel:      botLevel,
+		LastActivity:  time.Now(),
+		WasReplaced:   false,
+		ReplacementID: nil,
+	}
+
+	// Mark original player as replaced
+	player.WasReplaced = true
+	player.ReplacementID = &botID
+	player.IsActive = false
+	player.IsConnected = false
+	player.Connection = nil
+
+	// Add bot to game
+	game.Players[botID] = replacementBot
+
+	// Update activity timestamp
+	game.LastActivity = time.Now()
+
+	// Persist bot player to database
+	dbPlayer := &models.Player{
+		ID:       botID,
+		Name:     botName,
+		Type:     models.PlayerTypeBot,
+		BotLevel: botLevel,
+	}
+
+	if err := m.PersistPlayer(context.Background(), dbPlayer); err != nil {
+		// Rollback changes
+		delete(game.Players, botID)
+		player.WasReplaced = false
+		player.ReplacementID = nil
+		player.IsActive = true
+		return nil, fmt.Errorf("failed to persist replacement bot: %w", err)
+	}
+
+	if err := m.PersistGamePlayer(context.Background(), game.ID, replacementBot); err != nil {
+		// Rollback changes
+		delete(game.Players, botID)
+		player.WasReplaced = false
+		player.ReplacementID = nil
+		player.IsActive = true
+		return nil, fmt.Errorf("failed to persist replacement bot game player: %w", err)
+	}
+
+	// Update Redis
+	if err := m.StoreGameInRedis(context.Background(), game); err != nil {
+		logger.Error("Failed to update game in Redis after player replacement", "error", err, "room_code", roomCode)
+	}
+
+	// Broadcast player replacement
+	m.BroadcastToGame(game, MessageTypePlayerReplaced, PlayerReplacedPayload{
+		OriginalPlayerID: playerID,
+		ReplacementBot:   replacementBot,
+		Reason:           reason,
+	})
+
+	// Broadcast updated game state
+	m.BroadcastToGame(game, MessageTypeGameState, GameStatePayload{GameState: game})
+
+	// Send system message
+	m.SendSystemMessage(roomCode, fmt.Sprintf("%s was replaced by %s (%s)", player.Name, botName, reason))
+
+	log.Info("Player replaced with bot",
+		"original_player_id", playerID,
+		"original_player_name", player.Name,
+		"bot_id", botID,
+		"bot_name", botName,
+		"reason", reason,
+		"room_code", roomCode)
+
+	return game, nil
+}
+
+// CheckAndReplaceAFKPlayers checks for AFK players and replaces them with bots during active games
+func (m *Manager) CheckAndReplaceAFKPlayers(roomCode string, afkTimeout time.Duration) (*GameState, error) {
+	log := logger.GetLogger()
+
+	game := m.getGame(roomCode)
+	if game == nil {
+		return nil, fmt.Errorf("game not found")
+	}
+
+	// Only check for AFK during active games
+	if game.Status != models.GameStatusInProgress {
+		return game, nil
+	}
+
+	game.Lock()
+	defer game.Unlock()
+
+	replacedCount := 0
+	for playerID, player := range game.Players {
+		// Check if player is AFK and should be replaced
+		if player.IsAFK(afkTimeout) && !player.WasReplaced {
+			// Unlock temporarily for the replacement operation
+			game.Unlock()
+			if _, err := m.ReplacePlayerWithBot(roomCode, playerID, "AFK timeout"); err != nil {
+				log.Error("Failed to replace AFK player",
+					"player_id", playerID,
+					"player_name", player.Name,
+					"error", err)
+				game.Lock() // Re-lock before continuing
+				continue
+			}
+			game.Lock() // Re-lock after operation
+			replacedCount++
+		}
+	}
+
+	if replacedCount > 0 {
+		log.Info("Replaced AFK players with bots",
+			"room_code", roomCode,
+			"replaced_count", replacedCount)
+	}
+
+	return game, nil
+}
+
+// EndGameDueToAllAFK ends the game when all human players are AFK
+func (m *Manager) EndGameDueToAllAFK(roomCode string) error {
+	log := logger.GetLogger()
+
+	game := m.getGame(roomCode)
+	if game == nil {
+		return fmt.Errorf("game not found")
+	}
+
+	game.Lock()
+	defer game.Unlock()
+
+	// Mark game as abandoned
+	game.Status = models.GameStatusAbandoned
+	game.LastActivity = time.Now()
+
+	// Update database status
+	if err := m.UpdateGameStatus(context.Background(), game.ID, models.GameStatusAbandoned); err != nil {
+		log.Error("Failed to update game status to abandoned",
+			"room_code", roomCode,
+			"game_id", game.ID,
+			"error", err)
+	}
+
+	// Update Redis
+	if err := m.StoreGameInRedis(context.Background(), game); err != nil {
+		log.Error("Failed to update game in Redis after AFK abandonment", "error", err, "room_code", roomCode)
+	}
+
+	// Broadcast game ended
+	m.BroadcastToGame(game, MessageTypeGameCompleted, GameCompletedPayload{
+		FinalScores: make(map[uuid.UUID]int), // Empty scores since game was abandoned
+		Winner:      uuid.Nil,                // No winner
+	})
+
+	// Send system message
+	m.SendSystemMessage(roomCode, "Game ended: All players went AFK")
+
+	log.Info("Game ended due to all players being AFK",
+		"room_code", roomCode,
+		"game_id", game.ID)
+
+	return nil
+}
+
+// CheckAndHandleAllAFK checks if all human players are AFK and ends the game if so
+func (m *Manager) CheckAndHandleAllAFK(roomCode string, afkTimeout time.Duration) (bool, error) {
+	game := m.getGame(roomCode)
+	if game == nil {
+		return false, fmt.Errorf("game not found")
+	}
+
+	// Only check during active games
+	if game.Status != models.GameStatusInProgress {
+		return false, nil
+	}
+
+	// Check if all human players are AFK
+	if game.AreAllHumanPlayersAFK(afkTimeout) {
+		// End the game due to all players being AFK
+		if err := m.EndGameDueToAllAFK(roomCode); err != nil {
+			return false, fmt.Errorf("failed to end game due to all AFK: %w", err)
+		}
+		return true, nil // Game was ended
+	}
+
+	return false, nil // Game continues
+}
+
 // Helper methods
 
 func (m *Manager) GetGame(roomCode string) *GameState {
@@ -483,4 +752,16 @@ func (m *Manager) GetActiveGamesCount() int {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	return len(m.games)
+}
+
+func (m *Manager) GetAllGames() map[string]*GameState {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	// Return a copy to avoid concurrent access issues
+	games := make(map[string]*GameState)
+	for k, v := range m.games {
+		games[k] = v
+	}
+	return games
 }

@@ -164,6 +164,17 @@ type DatabaseStatsResponse struct {
 	Stats interface{} `json:"stats"`
 }
 
+type ReplacePlayerRequest struct {
+	RoomCode string `json:"room_code" binding:"required"`
+	PlayerID string `json:"player_id" binding:"required"`
+	Reason   string `json:"reason"`
+}
+
+type CheckAFKRequest struct {
+	RoomCode          string `json:"room_code" binding:"required"`
+	AFKTimeoutMinutes int    `json:"afk_timeout_minutes"`
+}
+
 // Player stats types
 type PlayerStatsResponse struct {
 	PlayerID           string  `json:"player_id"`

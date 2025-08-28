@@ -104,6 +104,9 @@ func handleWebSocketConnection(c *gin.Context, playerID uuid.UUID, userInfo *aut
 			break
 		}
 
+		// Update player activity on every message
+		updatePlayerActivity(playerID)
+
 		if err := handleMessage(conn, playerID, msg); err != nil {
 			logger.Error("Error handling WebSocket message", "error", err, "player_id", playerID, "message_type", msg.Type)
 			sendError(conn, err.Error())
@@ -115,11 +118,45 @@ func handleWebSocketConnection(c *gin.Context, playerID uuid.UUID, userInfo *aut
 	handleDisconnect(playerID)
 }
 
+// updatePlayerActivity updates the player's last activity in all their games
+func updatePlayerActivity(playerID uuid.UUID) {
+	manager := game.GetManager()
+
+	// Find all games the player is in and update their activity
+	for _, gameState := range manager.GetAllGames() {
+		gameState.Lock()
+		if player, exists := gameState.Players[playerID]; exists {
+			player.UpdateActivity()
+		}
+		gameState.Unlock()
+	}
+}
+
 // handleDisconnect cleans up when a player disconnects
 func handleDisconnect(playerID uuid.UUID) {
+	log := logger.GetLogger()
+	manager := game.GetManager()
+
+	log.Info("Player disconnected", "player_id", playerID)
+
 	// Mark player as disconnected in all their games
-	// This is a simplified implementation - in a real system you'd track which games a player is in
-	logger.Info("Player disconnected", "player_id", playerID)
+	for _, gameState := range manager.GetAllGames() {
+		gameState.Lock()
+		if player, exists := gameState.Players[playerID]; exists && !player.IsBot {
+			player.IsConnected = false
+			player.Connection = nil
+			player.UpdateActivity() // Update activity timestamp on disconnect
+
+			log.Info("Marked player as disconnected in game",
+				"player_id", playerID,
+				"room_code", gameState.RoomCode,
+				"game_status", gameState.Status)
+
+			// If the game is in progress, the cleanup service will handle replacement
+			// For waiting games, the player will just be marked as disconnected
+		}
+		gameState.Unlock()
+	}
 }
 
 // sendError sends an error message to the WebSocket client

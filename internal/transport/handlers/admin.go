@@ -7,8 +7,10 @@ import (
 	"dixitme/internal/database"
 	"dixitme/internal/models"
 	"dixitme/internal/seeder"
+	"dixitme/internal/services/game"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // AdminHandlers handles admin-related HTTP requests
@@ -181,5 +183,106 @@ func CleanupOldGames(c *gin.Context) {
 		"success":       true,
 		"message":       "Old games cleaned up successfully",
 		"deleted_count": result.RowsAffected,
+	})
+}
+
+// ReplacePlayerWithBot manually replaces a player with a bot for testing
+// @Summary Replace player with bot (Testing)
+// @Description Manually replace a player with a bot for testing purposes
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Param request body ReplacePlayerRequest true "Player replacement request"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /admin/replace-player [post]
+func (h *AdminHandlers) ReplacePlayerWithBot(c *gin.Context) {
+	var req ReplacePlayerRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		return
+	}
+
+	if req.RoomCode == "" || req.PlayerID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Room code and player ID are required"})
+		return
+	}
+
+	playerID, err := uuid.Parse(req.PlayerID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid player ID format"})
+		return
+	}
+
+	reason := req.Reason
+	if reason == "" {
+		reason = "Manual replacement (admin)"
+	}
+
+	manager := game.GetManager()
+	gameState, err := manager.ReplacePlayerWithBot(req.RoomCode, playerID, reason)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to replace player with bot",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":    true,
+		"message":    "Player replaced with bot successfully",
+		"room_code":  req.RoomCode,
+		"player_id":  req.PlayerID,
+		"reason":     reason,
+		"game_state": gameState,
+	})
+}
+
+// CheckAFKPlayers manually checks and replaces AFK players for testing
+// @Summary Check AFK players (Testing)
+// @Description Manually check and replace AFK players for testing purposes
+// @Tags admin
+// @Accept json
+// @Produce json
+// @Param request body CheckAFKRequest true "AFK check request"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]interface{}
+// @Failure 500 {object} map[string]interface{}
+// @Router /admin/check-afk [post]
+func (h *AdminHandlers) CheckAFKPlayers(c *gin.Context) {
+	var req CheckAFKRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		return
+	}
+
+	if req.RoomCode == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Room code is required"})
+		return
+	}
+
+	afkTimeout := time.Duration(req.AFKTimeoutMinutes) * time.Minute
+	if afkTimeout == 0 {
+		afkTimeout = 3 * time.Minute // Default to 3 minutes
+	}
+
+	manager := game.GetManager()
+	gameState, err := manager.CheckAndReplaceAFKPlayers(req.RoomCode, afkTimeout)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":   "Failed to check AFK players",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":          true,
+		"message":          "AFK check completed",
+		"room_code":        req.RoomCode,
+		"afk_timeout_mins": req.AFKTimeoutMinutes,
+		"game_state":       gameState,
 	})
 }

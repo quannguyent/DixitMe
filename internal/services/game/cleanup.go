@@ -43,6 +43,31 @@ func (m *Manager) cleanupInactiveGames() {
 	for roomCode, game := range m.games {
 		game.mu.RLock()
 
+		// Check for AFK players in active games first (before checking inactivity)
+		if game.Status == models.GameStatusInProgress {
+			game.mu.RUnlock()             // Unlock before calling functions
+			afkTimeout := 3 * time.Minute // 3 minutes AFK timeout
+
+			// First, check if all human players are AFK and end game if so
+			gameEnded, err := m.CheckAndHandleAllAFK(roomCode, afkTimeout)
+			if err != nil {
+				logger.Error("Failed to check if all players are AFK",
+					"room_code", roomCode,
+					"error", err)
+			}
+
+			// If game wasn't ended, try to replace individual AFK players with bots
+			if !gameEnded {
+				if _, err := m.CheckAndReplaceAFKPlayers(roomCode, afkTimeout); err != nil {
+					logger.Error("Failed to check and replace AFK players",
+						"room_code", roomCode,
+						"error", err)
+				}
+			}
+
+			game.mu.RLock() // Re-lock for the rest of the checks
+		}
+
 		// Count active/connected players
 		activePlayerCount := 0
 		for _, player := range game.Players {
@@ -53,11 +78,19 @@ func (m *Manager) cleanupInactiveGames() {
 
 		emptyRoomTimeout := 10 * time.Minute    // Empty rooms: 10 minutes
 		occupiedRoomTimeout := 30 * time.Minute // Rooms with players: 30 minutes
+		abandonedRoomTimeout := 2 * time.Minute // Abandoned games: 2 minutes
 
 		var shouldRemove bool
 		var reason string
 
-		if activePlayerCount == 0 {
+		if game.Status == models.GameStatusAbandoned {
+			// Abandoned games (all players AFK) - remove quickly
+			shouldRemove = game.IsInactive(abandonedRoomTimeout)
+			if shouldRemove {
+				occupiedRooms = append(occupiedRooms, roomCode)
+				reason = "Game closed - abandoned due to all players AFK (2 minutes)"
+			}
+		} else if activePlayerCount == 0 {
 			// Empty room - use shorter timeout
 			shouldRemove = game.IsInactive(emptyRoomTimeout)
 			if shouldRemove {

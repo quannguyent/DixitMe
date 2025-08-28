@@ -16,6 +16,7 @@ type MessageType string
 const (
 	MessageTypePlayerJoined   MessageType = "player_joined"
 	MessageTypePlayerLeft     MessageType = "player_left"
+	MessageTypePlayerReplaced MessageType = "player_replaced"
 	MessageTypeGameStarted    MessageType = "game_started"
 	MessageTypeRoundStarted   MessageType = "round_started"
 	MessageTypeClueSubmitted  MessageType = "clue_submitted"
@@ -38,6 +39,12 @@ type PlayerJoinedPayload struct {
 
 type PlayerLeftPayload struct {
 	PlayerID uuid.UUID `json:"player_id"`
+}
+
+type PlayerReplacedPayload struct {
+	OriginalPlayerID uuid.UUID `json:"original_player_id"`
+	ReplacementBot   *Player   `json:"replacement_bot"`
+	Reason           string    `json:"reason"`
 }
 
 type GameStartedPayload struct {

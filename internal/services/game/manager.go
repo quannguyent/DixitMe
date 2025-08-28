@@ -140,15 +140,16 @@ func (m *Manager) convertDBGameToGameState(dbGame *models.Game) *GameState {
 	players := make(map[uuid.UUID]*Player)
 	for _, dbGamePlayer := range dbGame.Players {
 		player := &Player{
-			ID:          dbGamePlayer.Player.ID,
-			Name:        dbGamePlayer.Player.Name,
-			IsBot:       dbGamePlayer.Player.Type == models.PlayerTypeBot,
-			IsActive:    dbGamePlayer.IsActive,
-			Score:       dbGamePlayer.Score,
-			Hand:        make([]int, 0), // Will be loaded separately if needed
-			IsConnected: false,          // Will be set when WebSocket connects
-			BotLevel:    dbGamePlayer.Player.BotLevel,
-			Position:    dbGamePlayer.Position,
+			ID:           dbGamePlayer.Player.ID,
+			Name:         dbGamePlayer.Player.Name,
+			IsBot:        dbGamePlayer.Player.Type == models.PlayerTypeBot,
+			IsActive:     dbGamePlayer.IsActive,
+			Score:        dbGamePlayer.Score,
+			Hand:         make([]int, 0), // Will be loaded separately if needed
+			IsConnected:  false,          // Will be set when WebSocket connects
+			BotLevel:     dbGamePlayer.Player.BotLevel,
+			Position:     dbGamePlayer.Position,
+			LastActivity: time.Now(), // Set to now when loading from database
 		}
 		players[dbGamePlayer.Player.ID] = player
 	}

@@ -347,6 +347,70 @@ Let's trace through how a complete game works, from creation to completion:
    - Generates JWT with user info
 3. Session tracking includes IP, user agent for security
 
+### 6. AFK Detection & Player Management 🕐
+
+The system includes sophisticated AFK (Away From Keyboard) detection and automatic player replacement to ensure games continue smoothly when players disconnect or leave.
+
+**AFK Detection Logic:**
+
+Players are considered AFK in these situations:
+1. **Disconnected Players**: Lost WebSocket connection for >3 minutes
+2. **Players Who Left**: Manually left during an active game
+3. **Inactive Players**: No WebSocket activity for >3 minutes
+
+**Automatic Bot Replacement Flow:**
+
+```
+Player Disconnects/Leaves → Mark as AFK → Wait 3 mins → Replace with Bot
+                                ↓
+                          Update LastActivity
+                                ↓
+                        Cleanup Service Detects
+                                ↓
+                         Automatic Replacement
+```
+
+**Backend AFK Processing:**
+
+1. **Activity Tracking**:
+   - Every WebSocket message updates player's last activity timestamp
+   - System tracks both connection status and manual leave actions
+   - Players marked as AFK if disconnected for more than timeout duration OR if they left the game manually
+
+2. **Automatic Replacement Logic**:
+   - When a player is detected as AFK, system creates a replacement bot
+   - Bot inherits the original player's score, position, and cards
+   - Game state is preserved seamlessly - other players see no disruption
+   - All players are notified of the replacement via broadcast message
+
+3. **Periodic Monitoring Service**:
+   - Background service runs every 2 minutes checking all active games
+   - First checks if ALL human players in a game are AFK
+   - If all are AFK: ends the game immediately
+   - If only some are AFK: replaces individual AFK players with bots
+   - Abandoned games are cleaned up faster (2 minutes vs 30 minutes)
+
+**Game Ending Due to All AFK:**
+
+When all human players go AFK:
+1. **Detection**: System checks if every human player is either disconnected or has left
+2. **Game End**: Game status automatically changed to "abandoned" 
+3. **Cleanup**: Abandoned games are removed after 2 minutes (vs 30 minutes for normal games)
+4. **Notification**: All players receive "Game ended: All players went AFK" message
+
+**Leave Game Behavior:**
+
+- **Waiting Games**: Players are completely removed
+- **Active Games**: Players marked as inactive (AFK) but stay in game for potential bot replacement
+
+**Key System Components:**
+- **AFK Scanner** - Periodically scans all games for inactive players
+- **All-AFK Detector** - Identifies when all human players have gone AFK
+- **Game Ender** - Gracefully terminates abandoned games
+- **Activity Tracker** - Monitors WebSocket activity to detect disconnections
+
+This system ensures games never stall due to disconnections while maintaining fair gameplay.
+
 ## 🔧 Key Functions Overview
 
 ### Core Backend Functions
@@ -356,12 +420,21 @@ Let's trace through how a complete game works, from creation to completion:
 - `JoinGame()` - Adds players to existing games with validation
 - `StartGame()` - Deals cards and begins first round
 - `GetGame()` - Retrieves active game state from memory
+- `RemovePlayer()` - Handles player leaving (removes from waiting games, marks AFK in active games)
+- `LeaveGame()` - Player-initiated leave (calls RemovePlayer)
 
 **Round Management**
 - `SubmitClue()` - Handles storyteller's card and clue submission
 - `SubmitCard()` - Processes player card submissions for clues
 - `SubmitVote()` - Records votes and triggers scoring when complete
 - `calculateScores()` - Applies Dixit scoring rules and updates player totals
+
+**AFK Detection & Bot Replacement**
+- **Player Replacement** - Replaces AFK/disconnected players with bots (preserves score/cards)
+- **AFK Scanning** - Periodically scans games for inactive players and replaces them
+- **All-AFK Detection** - Identifies when all human players are AFK and ends the game
+- **Game Termination** - Gracefully ends games when all players go AFK
+- **Activity Monitoring** - Tracks player WebSocket activity to detect disconnections
 
 **WebSocket Communication (`internal/transport/websocket/`)**
 - `handleMessage()` - Routes incoming messages to appropriate handlers
