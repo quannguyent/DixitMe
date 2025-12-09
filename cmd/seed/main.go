@@ -6,10 +6,11 @@ import (
 	"os"
 
 	"dixitme/internal/config"
-	"dixitme/internal/database"
-	"dixitme/internal/logger"
-	"dixitme/internal/seeder"
-	"dixitme/internal/storage"
+	"dixitme/internal/platform/logger"
+
+	"dixitme/internal/data/minio"
+	"dixitme/internal/data/postgres"
+	adapterSeeder "dixitme/internal/data/seeder"
 )
 
 func main() {
@@ -52,14 +53,14 @@ func main() {
 	log.Info("Starting database seeding...")
 
 	// Initialize database
-	database.Initialize(cfg.DatabaseURL)
+	postgres.Initialize(cfg.DatabaseURL)
 
 	// Initialize MinIO (optional)
-	if err := storage.Initialize(cfg.MinIO); err != nil {
+	if _, err := minio.Initialize(cfg.MinIO); err != nil {
 		log.Warn("MinIO not available, using local file paths", "error", err)
 	}
 
-	db := database.GetDB()
+	db := postgres.GetDB()
 
 	if *force {
 		log.Warn("Force mode: deleting existing data...")
@@ -86,19 +87,19 @@ func main() {
 	// Perform seeding based on flags
 	if *tagsOnly {
 		log.Info("Seeding tags only...")
-		if err := seeder.SeedTagsOnly(); err != nil {
+		if err := adapterSeeder.SeedTagsOnly(); err != nil {
 			log.Error("Failed to seed tags", "error", err)
 			os.Exit(1)
 		}
 	} else if *cardsOnly {
 		log.Info("Seeding cards only...")
-		if err := seeder.SeedCardsOnly(); err != nil {
+		if err := adapterSeeder.SeedCardsOnly(); err != nil {
 			log.Error("Failed to seed cards", "error", err)
 			os.Exit(1)
 		}
 	} else {
 		log.Info("Seeding complete database...")
-		if err := seeder.SeedDatabase(); err != nil {
+		if err := adapterSeeder.SeedDatabase(); err != nil {
 			log.Error("Failed to seed database", "error", err)
 			os.Exit(1)
 		}

@@ -152,3 +152,5 @@ tmp/
 
 # Local development
 *.local
+/.gocache
+AGENTS.md

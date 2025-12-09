@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"time"
 
-	"dixitme/internal/database"
-	"dixitme/internal/logger"
-	"dixitme/internal/models"
+	"dixitme/internal/platform/logger"
+	models "dixitme/internal/data/models"
+	"dixitme/internal/game/domain" // for AuthType
 
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
@@ -21,10 +21,10 @@ type AuthService struct {
 }
 
 // NewAuthService creates a new authentication service
-func NewAuthService(jwtService *JWTService) *AuthService {
+func NewAuthService(jwtService *JWTService, db *gorm.DB) *AuthService {
 	return &AuthService{
 		jwtService: jwtService,
-		db:         database.GetDB(),
+		db:         db,
 	}
 }
 
@@ -58,7 +58,7 @@ func (a *AuthService) RegisterWithPassword(email, username, displayName, passwor
 		Username:     username,
 		DisplayName:  displayName,
 		PasswordHash: string(hashedPassword),
-		AuthType:     models.AuthTypePassword,
+		AuthType:     domain.AuthTypePassword, // Use domain.AuthType
 		IsActive:     true,
 		CreatedAt:    time.Now(),
 		UpdatedAt:    time.Now(),
@@ -77,7 +77,7 @@ func (a *AuthService) LoginWithPassword(emailOrUsername, password string, ipAddr
 	// Find user
 	var user models.User
 	if err := a.db.Where("(email = ? OR username = ?) AND auth_type = ? AND is_active = ?",
-		emailOrUsername, emailOrUsername, models.AuthTypePassword, true).First(&user).Error; err != nil {
+		emailOrUsername, emailOrUsername, domain.AuthTypePassword, true).First(&user).Error; err != nil {
 		return nil, nil, "", fmt.Errorf("invalid credentials")
 	}
 
@@ -87,7 +87,7 @@ func (a *AuthService) LoginWithPassword(emailOrUsername, password string, ipAddr
 	}
 
 	// Create session
-	session, token, err := a.createSession(&user, models.AuthTypePassword, ipAddress, userAgent)
+	session, token, err := a.createSession(&user, domain.AuthTypePassword, ipAddress, userAgent)
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("failed to create session: %w", err)
 	}
@@ -115,7 +115,7 @@ func (a *AuthService) LoginWithGoogle(googleAccessToken string, ipAddress, userA
 	// Check if user exists
 	var user models.User
 	err := a.db.Where("google_id = ? OR (email = ? AND auth_type = ?)",
-		userInfo.Id, userInfo.Email, models.AuthTypeGoogle).First(&user).Error
+		userInfo.Id, userInfo.Email, domain.AuthTypeGoogle).First(&user).Error
 
 	if err == gorm.ErrRecordNotFound {
 		// Create new user
@@ -124,7 +124,7 @@ func (a *AuthService) LoginWithGoogle(googleAccessToken string, ipAddress, userA
 			Email:       userInfo.Email,
 			Username:    generateUsernameFromEmail(userInfo.Email),
 			DisplayName: userInfo.Name,
-			AuthType:    models.AuthTypeGoogle,
+			AuthType:    domain.AuthTypeGoogle,
 			GoogleID:    userInfo.Id,
 			Avatar:      userInfo.Picture,
 			IsActive:    true,
@@ -148,7 +148,7 @@ func (a *AuthService) LoginWithGoogle(googleAccessToken string, ipAddress, userA
 	}
 
 	// Create session
-	session, token, err := a.createSession(&user, models.AuthTypeGoogle, ipAddress, userAgent)
+	session, token, err := a.createSession(&user, domain.AuthTypeGoogle, ipAddress, userAgent)
 	if err != nil {
 		return nil, nil, "", fmt.Errorf("failed to create session: %w", err)
 	}
@@ -167,7 +167,7 @@ func (a *AuthService) CreateGuestSession(guestName, ipAddress, userAgent string)
 		guestName = "Guest " + uuid.New().String()[:8]
 	}
 
-	session, token, err := a.createSession(nil, models.AuthTypeGuest, ipAddress, userAgent)
+	session, token, err := a.createSession(nil, domain.AuthTypeGuest, ipAddress, userAgent)
 	if err != nil {
 		return nil, "", fmt.Errorf("failed to create guest session: %w", err)
 	}
@@ -248,10 +248,10 @@ func (a *AuthService) CleanupExpiredSessions() error {
 
 // Helper functions
 
-func (a *AuthService) createSession(user *models.User, authType models.AuthType, ipAddress, userAgent string) (*models.Session, string, error) {
+func (a *AuthService) createSession(user *models.User, authType domain.AuthType, ipAddress, userAgent string) (*models.Session, string, error) {
 	session := models.Session{
 		ID:        uuid.New(),
-		AuthType:  authType,
+		AuthType:  authType, // Use domain.AuthType
 		IPAddress: ipAddress,
 		UserAgent: userAgent,
 		ExpiresAt: time.Now().Add(24 * time.Hour), // 24 hours

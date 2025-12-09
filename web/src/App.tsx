@@ -1,12 +1,9 @@
 import React, { useEffect } from 'react';
-import { useGameStore } from './store/gameStore';
-import { useAuthStore } from './store/authStore';
-import GameLanding from './components/GameLanding';
-import Lobby from './components/Lobby';
-import GameBoard from './components/GameBoard';
+import { Auth } from './features/auth';
+import { useGameStore } from './features/game';
 
 function App() {
-  const { gameState, setCards } = useGameStore();
+  const { setCards } = useGameStore();
 
   useEffect(() => {
     // Load cards from API
@@ -29,15 +26,10 @@ function App() {
   }, [setCards]);
 
   return (
-    <div className="App">
-      {gameState && gameState.status !== 'waiting' ? (
-        <GameBoard />
-      ) : gameState && gameState.status === 'waiting' ? (
-        <Lobby />
-      ) : (
-        <GameLanding />
-      )}
-    </div>
+      <div className="App">
+        <Auth />
+      </div>
+
   );
 }
 

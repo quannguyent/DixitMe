@@ -5,8 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"dixitme/internal/logger"
-	"dixitme/internal/storage"
+	"dixitme/internal/platform/logger"
 
 	"github.com/joho/godotenv"
 )
@@ -17,8 +16,18 @@ type Config struct {
 	Port        string
 	GinMode     string
 	Logger      logger.Config
-	MinIO       storage.MinIOConfig
+	MinIO       MinIOConfig
 	Auth        AuthConfig
+}
+
+// MinIOConfig holds object storage settings.
+type MinIOConfig struct {
+	Endpoint        string `json:"endpoint"`
+	AccessKeyID     string `json:"access_key_id"`
+	SecretAccessKey string `json:"secret_access_key"`
+	BucketName      string `json:"bucket_name"`
+	UseSSL          bool   `json:"use_ssl"`
+	Region          string `json:"region"`
 }
 
 // AuthConfig holds authentication configuration
@@ -45,7 +54,7 @@ func Load() *Config {
 			Level:  getEnv("LOG_LEVEL", "info"),
 			Format: getEnv("LOG_FORMAT", "text"),
 		},
-		MinIO: storage.MinIOConfig{
+		MinIO: MinIOConfig{
 			Endpoint:        getEnv("MINIO_ENDPOINT", "localhost:9000"),
 			AccessKeyID:     getEnv("MINIO_ACCESS_KEY", "minioadmin"),
 			SecretAccessKey: getEnv("MINIO_SECRET_KEY", "minioadmin"),

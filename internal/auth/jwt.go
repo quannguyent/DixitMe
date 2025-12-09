@@ -4,7 +4,8 @@ import (
 	"errors"
 	"time"
 
-	"dixitme/internal/models"
+	models "dixitme/internal/data/models"
+	"dixitme/internal/game/domain" // For AuthType
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -12,11 +13,11 @@ import (
 
 // JWTClaims represents the claims in our JWT token
 type JWTClaims struct {
-	UserID    *uuid.UUID      `json:"user_id,omitempty"` // NULL for guests
-	SessionID uuid.UUID       `json:"session_id"`
-	AuthType  models.AuthType `json:"auth_type"`
-	Name      string          `json:"name"`
-	Email     string          `json:"email,omitempty"`
+	UserID    *uuid.UUID    `json:"user_id,omitempty"` // NULL for guests
+	SessionID uuid.UUID     `json:"session_id"`
+	AuthType  domain.AuthType `json:"auth_type"` // Use domain.AuthType
+	Name      string        `json:"name"`
+	Email     string        `json:"email,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -132,10 +133,17 @@ func (j *JWTService) ExtractUserInfo(tokenString string) (*UserInfo, error) {
 }
 
 // UserInfo represents extracted user information from JWT
+
 type UserInfo struct {
-	UserID    *uuid.UUID      `json:"user_id,omitempty"`
-	SessionID uuid.UUID       `json:"session_id"`
-	AuthType  models.AuthType `json:"auth_type"`
-	Name      string          `json:"name"`
-	Email     string          `json:"email,omitempty"`
+
+	UserID    *uuid.UUID    `json:"user_id,omitempty"`
+
+	SessionID uuid.UUID     `json:"session_id"`
+
+	AuthType  domain.AuthType `json:"auth_type"` // Use domain.AuthType
+
+	Name      string        `json:"name"`
+
+	Email     string        `json:"email,omitempty"`
+
 }
