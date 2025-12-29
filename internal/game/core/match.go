@@ -124,7 +124,6 @@ const (
 	MessageTypeError          MessageType = "error"
 	MessageTypeGameState      MessageType = "game_state"
 	MessageTypeChatMessage    MessageType = "chat_message"
-	MessageTypeChatHistory    MessageType = "chat_history"
 )
 
 // WebSocket message payloads

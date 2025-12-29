@@ -145,7 +145,6 @@ func NewServer(cfg *config.Config) (*gin.Engine, error) {
 	chatGroup := api.Group("/chat")
 	chatGroup.Use(authhttp.GuestOrAuth(jwtService))
 	{
-		chatGroup.POST("/send", handlers.SendChatMessage)
 		chatGroup.GET("/history", handlers.GetChatHistory)
 		chatGroup.GET("/stats", handlers.GetChatStats)
 	}

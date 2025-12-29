@@ -128,7 +128,6 @@ const (
 	ClientMessageSubmitVote     = "submit_vote"
 	ClientMessageLeaveGame      = "leave_game"
 	ClientMessageSendChat       = "send_chat"
-	ClientMessageGetChatHistory = "get_chat_history"
 )
 
 // Payload structures for client messages
@@ -170,12 +169,6 @@ type SendChatPayload struct {
 	RoomCode    string `json:"room_code"`
 	Message     string `json:"message"`
 	MessageType string `json:"message_type,omitempty"` // chat, emote
-}
-
-type GetChatHistoryPayload struct {
-	RoomCode string `json:"room_code"`
-	Phase    string `json:"phase,omitempty"` // lobby, voting, all
-	Limit    int    `json:"limit,omitempty"` // default 50
 }
 
 // handleWebSocketConnection upgrades and manages lifecycle.
@@ -380,10 +373,6 @@ func (h *Hub) handleMessage(conn *websocket.Conn, playerID uuid.UUID, msg Connec
 		if err := manager.SendChatMessage(payload.RoomCode, playerID, payload.Message, payload.MessageType); err != nil {
 			return err
 		}
-
-	case ClientMessageGetChatHistory:
-		// Could be implemented via HTTP for now
-		return fmt.Errorf("chat history over WS not implemented")
 
 	default:
 		return fmt.Errorf("unknown message type: %s", msg.Type)

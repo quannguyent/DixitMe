@@ -70,16 +70,21 @@ scripts/            # Utility scripts
 - Cards/Tags: `GET /cards|/cards/:card_id|/cards/legacy`, `POST /cards`, `POST /cards/:card_id/image`, `GET /tags`, `POST /tags`
 - Bots: `GET /bots/stats`
 - Admin: `POST /admin/seed|seed/tags|seed/cards|cleanup`, `GET /admin/stats`
-- Chat: `POST /chat/send`, `GET /chat/history`, `GET /chat/stats`
+- Chat: `GET /chat/history`, `GET /chat/stats`
+
+## Endpoint Design Notes
+- WebSocket is used for real-time game actions and live chat: create/join/start/leave game, submit clue/card/vote, send chat.
+- HTTP is used for authentication, CRUD/admin operations, and read-only queries like game lists, player stats, and chat history.
+- Chat history is HTTP-only; WebSocket only handles live chat messages.
 
 ## WebSocket
 - Path: `GET /ws`
 ### Messages
 Client → Server
-- `create_game`, `join_game`, `start_game`, `submit_clue`, `submit_card`, `submit_vote`, `leave_game`, `send_chat`, `get_chat_history`
+- `create_game`, `join_game`, `start_game`, `submit_clue`, `submit_card`, `submit_vote`, `leave_game`, `send_chat`
 
 Server → Client (message types)
-- `connection_established`, `game_state`, `player_joined/left`, `game_started`, `round_started`, `clue_submitted`, `voting_started`, `round_completed`, `game_completed`, `chat_message`, `chat_history`, `error`
+- `connection_established`, `game_state`, `player_joined/left`, `game_started`, `round_started`, `clue_submitted`, `card_submitted`, `voting_started`, `vote_submitted`, `round_completed`, `game_completed`, `chat_message`, `error`
 
 ## Data & Assets
 - Models live in `internal/data/models`.

@@ -777,36 +777,6 @@ func GetBotStats(c *gin.Context) {
 
 // Chat Handlers
 
-// @Summary Send chat message
-// @Description Send a chat message in a game
-// @Tags chat
-// @Accept json
-// @Produce json
-// @Param request body SendChatRequest true "Chat message data"
-// @Success 200 {object} map[string]interface{}
-// @Failure 400 {object} map[string]interface{}
-// @Failure 500 {object} map[string]interface{}
-// @Router /chat/send [post]
-func SendChatMessage(c *gin.Context) {
-	var req SendChatRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	manager := game.GetManager()
-	err := manager.SendChatMessage(req.RoomCode, req.PlayerID, req.Message, req.MessageType)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"success": true,
-		"message": "Chat message sent",
-	})
-}
-
 // @Summary Get chat history
 // @Description Get chat messages for a game and phase
 // @Tags chat
