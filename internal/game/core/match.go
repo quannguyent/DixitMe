@@ -51,15 +51,16 @@ func (gs *GameState) IsInactive(duration time.Duration) bool {
 
 // Player represents an active player in the game
 type Player struct {
-	ID          uuid.UUID `json:"id"`
-	Name        string    `json:"name"`
-	Score       int       `json:"score"`
-	Position    int       `json:"position"`
-	Hand        []int     `json:"hand"` // Card IDs in player's hand
-	IsConnected bool      `json:"is_connected"`
-	IsActive    bool      `json:"is_active"`
-	IsBot       bool      `json:"is_bot"`
-	BotLevel    string    `json:"bot_level,omitempty"` // easy, medium, hard
+	ID             uuid.UUID  `json:"id"`
+	Name           string     `json:"name"`
+	Score          int        `json:"score"`
+	Position       int        `json:"position"`
+	Hand           []int      `json:"hand"` // Card IDs in player's hand
+	IsConnected    bool       `json:"is_connected"`
+	DisconnectedAt *time.Time `json:"disconnected_at,omitempty"`
+	IsActive       bool       `json:"is_active"`
+	IsBot          bool       `json:"is_bot"`
+	BotLevel       string     `json:"bot_level,omitempty"` // easy, medium, hard
 }
 
 // Round represents the current round state

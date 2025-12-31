@@ -1,9 +1,12 @@
 import React, { useEffect } from 'react';
 import { Auth } from './features/auth';
 import { useGameStore } from './features/game';
+import { useAuthStore } from './features/auth/stores/authStore';
+import { HomePage } from './pages/HomePage';
 
 function App() {
   const { setCards } = useGameStore();
+  const { isAuthenticated } = useAuthStore();
 
   useEffect(() => {
     // Load cards from API
@@ -26,10 +29,9 @@ function App() {
   }, [setCards]);
 
   return (
-      <div className="App">
-        <Auth />
-      </div>
-
+    <div className="App">
+      {isAuthenticated ? <HomePage /> : <Auth />}
+    </div>
   );
 }
 

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { devtools } from 'zustand/middleware';
-import { GameState, Player, Card, GameMessage, MessageTypes } from '../types';
+import { GameState, Player, Card, GameMessage, MessageTypes, ChatMessage } from '../types';
 
 interface GameStore {
   // Connection state
@@ -13,6 +13,7 @@ interface GameStore {
   gameState: GameState | null;
   currentPlayer: Player | null;
   cards: Card[];
+  chatMessages: ChatMessage[];
   
   // UI state
   isLoading: boolean;
@@ -30,10 +31,12 @@ interface GameStore {
   submitCard: (roomCode: string, cardId: number) => void;
   submitVote: (roomCode: string, cardId: number) => void;
   leaveGame: (roomCode: string) => void;
+  sendChat: (roomCode: string, message: string, messageType?: string) => void;
   setGameState: (gameState: GameState) => void;
   setCards: (cards: Card[]) => void;
   setError: (error: string | null) => void;
   setLoading: (loading: boolean) => void;
+  setChatMessages: (messages: ChatMessage[]) => void;
 }
 
 const WEBSOCKET_URL = process.env.NODE_ENV === 'production' 
@@ -51,6 +54,7 @@ export const useGameStore = create<GameStore>()(
       gameState: null,
       currentPlayer: null,
       cards: [],
+      chatMessages: [],
       isLoading: false,
       error: null,
 
@@ -139,8 +143,8 @@ export const useGameStore = create<GameStore>()(
 
       createGame: (roomCode, playerName) => {
         const state = get();
-        if (!state.socket || !state.isConnected) {
-          set({ error: 'Not connected to server' }, false, 'create-game-error');
+        if (!state.socket || state.socket.readyState !== WebSocket.OPEN) {
+          set({ error: 'WebSocket not ready' }, false, 'create-game-error');
           return;
         }
 
@@ -155,8 +159,8 @@ export const useGameStore = create<GameStore>()(
 
       joinGame: (roomCode, playerName) => {
         const state = get();
-        if (!state.socket || !state.isConnected) {
-          set({ error: 'Not connected to server' }, false, 'join-game-error');
+        if (!state.socket || state.socket.readyState !== WebSocket.OPEN) {
+          set({ error: 'WebSocket not ready' }, false, 'join-game-error');
           return;
         }
 
@@ -180,8 +184,7 @@ export const useGameStore = create<GameStore>()(
             },
             body: JSON.stringify({
               room_code: roomCode,
-              bot_name: botName,
-              difficulty: difficulty
+              bot_level: difficulty
             }),
           });
 
@@ -203,7 +206,7 @@ export const useGameStore = create<GameStore>()(
 
       startGame: (roomCode) => {
         const state = get();
-        if (!state.socket || !state.isConnected) return;
+        if (!state.socket || state.socket.readyState !== WebSocket.OPEN) return;
 
         const message = {
           type: MessageTypes.START_GAME,
@@ -215,7 +218,7 @@ export const useGameStore = create<GameStore>()(
 
       submitClue: (roomCode, clue, cardId) => {
         const state = get();
-        if (!state.socket || !state.isConnected) return;
+        if (!state.socket || state.socket.readyState !== WebSocket.OPEN) return;
 
         const message = {
           type: MessageTypes.SUBMIT_CLUE,
@@ -227,7 +230,7 @@ export const useGameStore = create<GameStore>()(
 
       submitCard: (roomCode, cardId) => {
         const state = get();
-        if (!state.socket || !state.isConnected) return;
+        if (!state.socket || state.socket.readyState !== WebSocket.OPEN) return;
 
         const message = {
           type: MessageTypes.SUBMIT_CARD,
@@ -239,7 +242,7 @@ export const useGameStore = create<GameStore>()(
 
       submitVote: (roomCode, cardId) => {
         const state = get();
-        if (!state.socket || !state.isConnected) return;
+        if (!state.socket || state.socket.readyState !== WebSocket.OPEN) return;
 
         const message = {
           type: MessageTypes.SUBMIT_VOTE,
@@ -251,7 +254,7 @@ export const useGameStore = create<GameStore>()(
 
       leaveGame: (roomCode) => {
         const state = get();
-        if (!state.socket || !state.isConnected) return;
+        if (!state.socket || state.socket.readyState !== WebSocket.OPEN) return;
 
         const message = {
           type: MessageTypes.LEAVE_GAME,
@@ -259,10 +262,31 @@ export const useGameStore = create<GameStore>()(
         };
 
         state.socket.send(JSON.stringify(message));
+        set({
+          gameState: null,
+          currentPlayer: null,
+          chatMessages: [],
+          isLoading: false,
+        }, false, 'leave-game');
+        clearRoomCodeFromUrl();
+      },
+
+      sendChat: (roomCode, message, messageType = 'chat') => {
+        const state = get();
+        if (!state.socket || state.socket.readyState !== WebSocket.OPEN) return;
+        if (!message.trim()) return;
+
+        state.socket.send(JSON.stringify({
+          type: MessageTypes.SEND_CHAT,
+          payload: { room_code: roomCode, message: message.trim(), message_type: messageType }
+        }));
       },
 
       setGameState: (gameState) => {
         const state = get();
+        if (state.gameState?.room_code !== gameState.room_code) {
+          set({ chatMessages: [] }, false, 'reset-chat');
+        }
         const currentPlayer = state.playerId && gameState.players[state.playerId] 
           ? gameState.players[state.playerId] 
           : null;
@@ -276,6 +300,10 @@ export const useGameStore = create<GameStore>()(
 
       setCards: (cards) => {
         set({ cards }, false, 'set-cards');
+      },
+
+      setChatMessages: (messages) => {
+        set({ chatMessages: messages }, false, 'set-chat-messages');
       },
 
       setError: (error) => {
@@ -309,6 +337,13 @@ function handleWebSocketMessage(
     case MessageTypes.GAME_STATE:
       const { game_state } = message.payload;
       get().setGameState(game_state);
+      setRoomCodeInUrl(game_state.room_code);
+      break;
+
+    case MessageTypes.GAME_STARTED:
+      if (message.payload?.game_state) {
+        get().setGameState(message.payload.game_state);
+      }
       break;
 
     case MessageTypes.ERROR:
@@ -329,7 +364,6 @@ function handleWebSocketMessage(
 
     case MessageTypes.PLAYER_JOINED:
     case MessageTypes.PLAYER_LEFT:
-    case MessageTypes.GAME_STARTED:
     case MessageTypes.ROUND_STARTED:
     case MessageTypes.CLUE_SUBMITTED:
     case MessageTypes.CARD_SUBMITTED:
@@ -337,10 +371,40 @@ function handleWebSocketMessage(
     case MessageTypes.VOTE_SUBMITTED:
     case MessageTypes.ROUND_COMPLETED:
     case MessageTypes.GAME_COMPLETED:
-      // These messages will trigger game state updates from the server
+    case MessageTypes.CHAT_MESSAGE:
+      const chatMessage = message.payload as ChatMessage;
+      set({ 
+        chatMessages: [...get().chatMessages, chatMessage] 
+      }, false, 'chat-message');
       break;
 
     default:
       console.warn('Unknown message type:', message.type);
+  }
+}
+
+function setRoomCodeInUrl(roomCode: string) {
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('room_code') === roomCode) {
+      return;
+    }
+    url.searchParams.set('room_code', roomCode);
+    window.history.replaceState({}, '', url.toString());
+  } catch (error) {
+    console.warn('Failed to update room code in URL:', error);
+  }
+}
+
+function clearRoomCodeFromUrl() {
+  try {
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has('room_code')) {
+      return;
+    }
+    url.searchParams.delete('room_code');
+    window.history.replaceState({}, '', url.toString());
+  } catch (error) {
+    console.warn('Failed to clear room code from URL:', error);
   }
 }

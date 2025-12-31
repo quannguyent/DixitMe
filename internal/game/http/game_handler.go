@@ -700,6 +700,11 @@ func AddBotToGame(c *gin.Context) {
 		return
 	}
 
+	// Broadcast updated game state so clients refresh player list.
+	manager.BroadcastToGame(gameState, game.MessageTypeGameState, game.GameStatePayload{
+		GameState: gameState,
+	})
+
 	// Count bots in game
 	botCount := 0
 	for _, player := range gameState.Players {

@@ -58,6 +58,16 @@ export interface GameMessage {
   payload: any;
 }
 
+export interface ChatMessage {
+  id: string;
+  player_id: string;
+  player_name: string;
+  message: string;
+  message_type: string;
+  phase: string;
+  timestamp: string;
+}
+
 // WebSocket message types
 export const MessageTypes = {
   // From server
@@ -72,6 +82,7 @@ export const MessageTypes = {
   VOTE_SUBMITTED: 'vote_submitted',
   ROUND_COMPLETED: 'round_completed',
   GAME_COMPLETED: 'game_completed',
+  CHAT_MESSAGE: 'chat_message',
   ERROR: 'error',
   GAME_STATE: 'game_state',
   
@@ -83,6 +94,7 @@ export const MessageTypes = {
   SUBMIT_CARD: 'submit_card',
   SUBMIT_VOTE: 'submit_vote',
   LEAVE_GAME: 'leave_game',
+  SEND_CHAT: 'send_chat',
 } as const;
 
 export type MessageType = typeof MessageTypes[keyof typeof MessageTypes];

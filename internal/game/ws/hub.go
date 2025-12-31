@@ -25,16 +25,18 @@ var upgrader = websocket.Upgrader{
 
 // Hub manages WebSocket connections and implements game.Broadcaster.
 type Hub struct {
-	manager    *game.Manager
-	jwtService *auth.JWTService
-	conns      map[string]map[uuid.UUID]*websocket.Conn // roomCode -> playerID -> conn
-	mu         sync.RWMutex
+	manager     *game.Manager
+	jwtService  *auth.JWTService
+	conns       map[string]map[uuid.UUID]*websocket.Conn // roomCode -> playerID -> conn
+	playerRooms map[uuid.UUID]string                     // playerID -> roomCode
+	mu          sync.RWMutex
 }
 
 func NewHub(jwtService *auth.JWTService) *Hub {
 	return &Hub{
-		jwtService: jwtService,
-		conns:      make(map[string]map[uuid.UUID]*websocket.Conn),
+		jwtService:  jwtService,
+		conns:       make(map[string]map[uuid.UUID]*websocket.Conn),
+		playerRooms: make(map[uuid.UUID]string),
 	}
 }
 
@@ -120,14 +122,14 @@ type ConnectionMessage struct {
 
 // Message types from client
 const (
-	ClientMessageJoinGame       = "join_game"
-	ClientMessageCreateGame     = "create_game"
-	ClientMessageStartGame      = "start_game"
-	ClientMessageSubmitClue     = "submit_clue"
-	ClientMessageSubmitCard     = "submit_card"
-	ClientMessageSubmitVote     = "submit_vote"
-	ClientMessageLeaveGame      = "leave_game"
-	ClientMessageSendChat       = "send_chat"
+	ClientMessageJoinGame   = "join_game"
+	ClientMessageCreateGame = "create_game"
+	ClientMessageStartGame  = "start_game"
+	ClientMessageSubmitClue = "submit_clue"
+	ClientMessageSubmitCard = "submit_card"
+	ClientMessageSubmitVote = "submit_vote"
+	ClientMessageLeaveGame  = "leave_game"
+	ClientMessageSendChat   = "send_chat"
 )
 
 // Payload structures for client messages
@@ -219,6 +221,10 @@ func (h *Hub) handleWebSocketConnection(c *gin.Context, playerID uuid.UUID, user
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				logger.Error("WebSocket unexpected close", "error", err, "player_id", playerID)
 			}
+			if roomCode, ok := h.getPlayerRoom(playerID); ok {
+				h.clearPlayerRoom(playerID)
+				h.manager.MarkPlayerDisconnected(roomCode, playerID)
+			}
 			break
 		}
 
@@ -289,6 +295,7 @@ func (h *Hub) handleMessage(conn *websocket.Conn, playerID uuid.UUID, msg Connec
 		}
 
 		h.registerConnection(payload.RoomCode, playerID, conn)
+		h.setPlayerRoom(playerID, payload.RoomCode)
 
 		return conn.WriteJSON(game.GameMessage{
 			Type:    game.MessageTypeGameState,
@@ -307,6 +314,7 @@ func (h *Hub) handleMessage(conn *websocket.Conn, playerID uuid.UUID, msg Connec
 		}
 
 		h.registerConnection(payload.RoomCode, playerID, conn)
+		h.setPlayerRoom(playerID, payload.RoomCode)
 
 		return conn.WriteJSON(game.GameMessage{
 			Type:    game.MessageTypeGameState,
@@ -363,6 +371,7 @@ func (h *Hub) handleMessage(conn *websocket.Conn, playerID uuid.UUID, msg Connec
 			return err
 		}
 		h.unregisterConnection(payload.RoomCode, playerID)
+		h.clearPlayerRoom(playerID)
 
 	case ClientMessageSendChat:
 		var payload SendChatPayload
@@ -389,4 +398,23 @@ func sendError(conn *websocket.Conn, errMsg string) {
 			Message: errMsg,
 		},
 	})
+}
+
+func (h *Hub) getPlayerRoom(playerID uuid.UUID) (string, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	roomCode, ok := h.playerRooms[playerID]
+	return roomCode, ok
+}
+
+func (h *Hub) setPlayerRoom(playerID uuid.UUID, roomCode string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.playerRooms[playerID] = roomCode
+}
+
+func (h *Hub) clearPlayerRoom(playerID uuid.UUID) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	delete(h.playerRooms, playerID)
 }

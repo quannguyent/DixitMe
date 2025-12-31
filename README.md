@@ -61,6 +61,19 @@ scripts/            # Utility scripts
 - Scoring: if all/none guess storyteller → storyteller 0, others 2; otherwise storyteller + correct guessers 3; +1 per vote on your card (non-storyteller).
 - Ends at 30 points or empty deck.
 
+## Working Flow
+- Startup: `NewServer` wires DB/Redis, creates a single in-memory `Manager`, and connects it to the WebSocket hub.
+- Connect: client opens `GET /ws`; server replies with `connection_established` and stores the socket.
+- Create/Join: client sends `create_game` or `join_game`; server updates in-memory game state and returns `game_state`.
+- Gameplay: clients send `start_game`, `submit_clue`, `submit_card`, `submit_vote`, `leave_game`; server validates and broadcasts WS events.
+- Chat: client sends `send_chat` over WS; server persists and broadcasts `chat_message`.
+- Read-only data: HTTP endpoints serve game lists, stats, cards/tags, and chat history.
+
+## Endpoint Design Notes
+- WebSocket is used for real-time game actions and live chat: create/join/start/leave game, submit clue/card/vote, send chat.
+- HTTP is used for authentication, CRUD/admin operations, and read-only queries like game lists, player stats, and chat history.
+- Chat history is HTTP-only; WebSocket only handles live chat messages.
+
 ## REST API (key endpoints)
 - Base path: `/api/v1` (Swagger: `/swagger/index.html`)
 - Health: `GET /health`
@@ -71,11 +84,6 @@ scripts/            # Utility scripts
 - Bots: `GET /bots/stats`
 - Admin: `POST /admin/seed|seed/tags|seed/cards|cleanup`, `GET /admin/stats`
 - Chat: `GET /chat/history`, `GET /chat/stats`
-
-## Endpoint Design Notes
-- WebSocket is used for real-time game actions and live chat: create/join/start/leave game, submit clue/card/vote, send chat.
-- HTTP is used for authentication, CRUD/admin operations, and read-only queries like game lists, player stats, and chat history.
-- Chat history is HTTP-only; WebSocket only handles live chat messages.
 
 ## WebSocket
 - Path: `GET /ws`

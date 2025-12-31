@@ -17,28 +17,30 @@ import (
 
 // Manager manages all active games
 type Manager struct {
-	games           map[string]*GameState
-	mu              sync.RWMutex
-	cleanupInterval time.Duration
-	inactiveTimeout time.Duration
-	stopCleanup     chan bool
-	repo            GameRepository
-	cache           GameCache
-	broadcaster     Broadcaster
+	games                 map[string]*GameState
+	mu                    sync.RWMutex
+	cleanupInterval       time.Duration
+	inactiveTimeout       time.Duration
+	disconnectedPlayerTTL time.Duration
+	stopCleanup           chan bool
+	repo                  GameRepository
+	cache                 GameCache
+	broadcaster           Broadcaster
 }
 
 var defaultManager *Manager
 
 // NewManager constructs a game manager instance.
-func NewManager(repo GameRepository, cache GameCache, broadcaster Broadcaster) *Manager {
+func NewManager(repo GameRepository, cache GameCache, broadcaster Broadcaster, disconnectedPlayerTTL time.Duration) *Manager {
 	m := &Manager{
-		games:           make(map[string]*GameState),
-		cleanupInterval: 2 * time.Minute,  // Check every 2 minutes
-		inactiveTimeout: 10 * time.Minute, // This will be dynamic based on room state
-		stopCleanup:     make(chan bool),
-		repo:            repo,
-		cache:           cache,
-		broadcaster:     broadcaster,
+		games:                 make(map[string]*GameState),
+		cleanupInterval:       2 * time.Minute,  // Check every 2 minutes
+		inactiveTimeout:       10 * time.Minute, // This will be dynamic based on room state
+		disconnectedPlayerTTL: disconnectedPlayerTTL,
+		stopCleanup:           make(chan bool),
+		repo:                  repo,
+		cache:                 cache,
+		broadcaster:           broadcaster,
 	}
 	go m.startCleanupService()
 	if defaultManager == nil {
@@ -92,13 +94,14 @@ func (m *Manager) CreateGame(roomCode string, creatorID uuid.UUID, creatorName s
 
 	// Add creator as first player
 	creator := &Player{
-		ID:          creatorID,
-		Name:        creatorName,
-		Score:       0,
-		Position:    1,
-		Hand:        make([]int, 0),
-		IsConnected: true,
-		IsActive:    true,
+		ID:             creatorID,
+		Name:           creatorName,
+		Score:          0,
+		Position:       1,
+		Hand:           make([]int, 0),
+		IsConnected:    true,
+		DisconnectedAt: nil,
+		IsActive:       true,
 	}
 
 	game.Players[creatorID] = creator
@@ -114,6 +117,11 @@ func (m *Manager) CreateGame(roomCode string, creatorID uuid.UUID, creatorName s
 			return nil, fmt.Errorf("room code '%s' is already taken, please try a different one", roomCode)
 		}
 		return nil, fmt.Errorf("failed to create game: %w", err)
+	}
+
+	if err := m.repo.AddPlayerToGame(game.ID, creator); err != nil {
+		delete(m.games, roomCode)
+		return nil, fmt.Errorf("failed to add creator to game: %w", err)
 	}
 
 	// Store in Redis for scaling
@@ -140,6 +148,23 @@ func (m *Manager) JoinGame(roomCode string, playerID uuid.UUID, playerName strin
 	// Update activity
 	game.LastActivity = time.Now()
 
+	// Handle reconnection
+	if game.Status == domain.GameStatusWaiting || game.Status == domain.GameStatusInProgress {
+		if player, exists := game.Players[playerID]; exists && !player.IsConnected {
+			// Allow reconnection
+			player.IsConnected = true
+			player.DisconnectedAt = nil
+
+			// Broadcast player rejoin
+			m.BroadcastToGame(game, MessageTypePlayerJoined, PlayerJoinedPayload{Player: player})
+
+			// Send system message
+			m.SendSystemMessage(roomCode, fmt.Sprintf("%s rejoined the game", playerName))
+
+			return game, nil
+		}
+	}
+
 	// Check if game is still accepting players
 	if game.Status != domain.GameStatusWaiting {
 		return nil, fmt.Errorf("game already started")
@@ -157,13 +182,14 @@ func (m *Manager) JoinGame(roomCode string, playerID uuid.UUID, playerName strin
 
 	// Add player
 	player := &Player{
-		ID:          playerID,
-		Name:        playerName,
-		Score:       0,
-		Position:    len(game.Players) + 1,
-		Hand:        make([]int, 0),
-		IsConnected: true,
-		IsActive:    true,
+		ID:             playerID,
+		Name:           playerName,
+		Score:          0,
+		Position:       len(game.Players) + 1,
+		Hand:           make([]int, 0),
+		IsConnected:    true,
+		DisconnectedAt: nil,
+		IsActive:       true,
 	}
 
 	game.Players[playerID] = player
@@ -186,6 +212,40 @@ func (m *Manager) JoinGame(roomCode string, playerID uuid.UUID, playerName strin
 	m.SendSystemMessage(roomCode, fmt.Sprintf("%s joined the game", playerName))
 
 	return game, nil
+}
+
+// MarkPlayerDisconnected marks a player as disconnected and keeps them in the room.
+func (m *Manager) MarkPlayerDisconnected(roomCode string, playerID uuid.UUID) error {
+	m.mu.RLock()
+	game, exists := m.games[roomCode]
+	m.mu.RUnlock()
+	if !exists {
+		return fmt.Errorf("game not found")
+	}
+
+	game.Lock()
+	player, inGame := game.Players[playerID]
+	if !inGame {
+		game.Unlock()
+		return fmt.Errorf("player not in game")
+	}
+
+	now := time.Now()
+	player.IsConnected = false
+	player.IsActive = false
+	player.DisconnectedAt = &now
+	game.LastActivity = now
+	game.Unlock()
+
+	if m.cache != nil {
+		if err := m.cache.SetGame(context.Background(), game); err != nil {
+			logger.Error("Failed to update game cache after disconnect", "error", err, "room_code", roomCode)
+		}
+	}
+
+	m.SendSystemMessage(roomCode, fmt.Sprintf("%s has disconnected", player.Name))
+
+	return nil
 }
 
 // LeaveGame removes a player from an active game and notifies the room.
@@ -276,15 +336,16 @@ func (m *Manager) AddBot(roomCode string, botLevel string) (*GameState, error) {
 
 	// Create game player
 	player := &Player{
-		ID:          botID,
-		Name:        botName,
-		Score:       0,
-		Position:    len(game.Players),
-		Hand:        make([]int, 0),
-		IsConnected: true, // Bots are always "connected"
-		IsActive:    true,
-		IsBot:       true,
-		BotLevel:    botLevel,
+		ID:             botID,
+		Name:           botName,
+		Score:          0,
+		Position:       len(game.Players),
+		Hand:           make([]int, 0),
+		IsConnected:    true, // Bots are always "connected"
+		DisconnectedAt: nil,
+		IsActive:       true,
+		IsBot:          true,
+		BotLevel:       botLevel,
 	}
 
 	game.Players[botID] = player
@@ -1192,13 +1253,22 @@ func (m *Manager) cleanupInactiveGames() {
 	var occupiedRooms []string
 
 	for roomCode, game := range m.games {
-		game.mu.RLock()
+		game.mu.Lock()
 
-		// Count active/connected players
+		// Count active/connected players and prune expired disconnects.
 		activePlayerCount := 0
-		for _, player := range game.Players {
+		removedDisconnected := false
+		for playerID, player := range game.Players {
 			if player.IsConnected {
 				activePlayerCount++
+				continue
+			}
+
+			if m.disconnectedPlayerTTL > 0 && player.DisconnectedAt != nil {
+				if time.Since(*player.DisconnectedAt) > m.disconnectedPlayerTTL {
+					delete(game.Players, playerID)
+					removedDisconnected = true
+				}
 			}
 		}
 
@@ -1227,7 +1297,7 @@ func (m *Manager) cleanupInactiveGames() {
 		if shouldRemove {
 			toRemove = append(toRemove, roomCode)
 			// Store reason for later use
-			game.mu.RUnlock()
+			game.mu.Unlock()
 
 			// Notify all connected players that the game is being closed
 			m.broadcastGameClosure(game, reason)
@@ -1238,7 +1308,13 @@ func (m *Manager) cleanupInactiveGames() {
 				logger.Error("Failed to mark game as abandoned", "error", err, "room_code", game.RoomCode)
 			}
 		} else {
-			game.mu.RUnlock()
+			game.mu.Unlock()
+		}
+
+		if removedDisconnected && m.cache != nil {
+			if err := m.cache.SetGame(context.Background(), game); err != nil {
+				logger.Error("Failed to update game cache after pruning disconnects", "error", err, "room_code", roomCode)
+			}
 		}
 	}
 

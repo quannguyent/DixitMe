@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"time"
 
 	"dixitme/internal/platform/logger"
 
@@ -11,13 +12,14 @@ import (
 )
 
 type Config struct {
-	DatabaseURL string
-	RedisURL    string
-	Port        string
-	GinMode     string
-	Logger      logger.Config
-	MinIO       MinIOConfig
-	Auth        AuthConfig
+	DatabaseURL           string
+	RedisURL              string
+	Port                  string
+	GinMode               string
+	Logger                logger.Config
+	MinIO                 MinIOConfig
+	Auth                  AuthConfig
+	DisconnectedPlayerTTL time.Duration
 }
 
 // MinIOConfig holds object storage settings.
@@ -68,6 +70,7 @@ func Load() *Config {
 			GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
 			EnableSSO:          getBoolEnv("ENABLE_SSO", true),
 		},
+		DisconnectedPlayerTTL: getDurationEnv("DISCONNECTED_PLAYER_TTL", 5*time.Minute),
 	}
 }
 
@@ -83,6 +86,15 @@ func getBoolEnv(key string, defaultValue bool) bool {
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
+	}
+	return defaultValue
+}
+
+func getDurationEnv(key string, defaultValue time.Duration) time.Duration {
+	if value := os.Getenv(key); value != "" {
+		if parsed, err := time.ParseDuration(value); err == nil {
+			return parsed
+		}
 	}
 	return defaultValue
 }

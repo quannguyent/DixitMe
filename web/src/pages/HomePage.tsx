@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useGameStore } from '../features/game/stores/gameStore';
+import { Lobby } from '../features/lobby/components/Lobby';
+import { GameBoard } from '../features/game';
 import { useAuthStore } from '../features/auth/stores/authStore';
-import styles from './GameLanding.module.css';
+import styles from './HomePage.module.css';
 
 export const HomePage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'join' | 'create'>('join');
@@ -17,8 +19,10 @@ export const HomePage: React.FC = () => {
     password: '',
     confirmPassword: '',
   });
+  const [isAutoJoining, setIsAutoJoining] = useState(false);
 
   const {
+    gameState,
     isConnected,
     isLoading: gameLoading,
     error: gameError,
@@ -27,6 +31,8 @@ export const HomePage: React.FC = () => {
     joinGame,
     setError: setGameError,
   } = useGameStore();
+
+  const autoJoinAttemptedRef = useRef(false);
 
   const {
     user,
@@ -39,12 +45,54 @@ export const HomePage: React.FC = () => {
     clearError,
   } = useAuthStore();
 
+  const shouldShowLobby = !!gameState && gameState.status === 'waiting';
+  const shouldShowGame = !!gameState && gameState.status !== 'waiting';
+
+  const clearRoomCodeFromUrl = () => {
+    try {
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has('room_code')) {
+        return;
+      }
+      url.searchParams.delete('room_code');
+      window.history.replaceState({}, '', url.toString());
+    } catch (error) {
+      console.warn('Failed to clear room code from URL:', error);
+    }
+  };
+
   // Auto-connect to WebSocket
   useEffect(() => {
     if (!isConnected) {
       connect();
     }
   }, [isConnected, connect]);
+
+  // Auto-join from URL if room_code is present.
+  useEffect(() => {
+    if (autoJoinAttemptedRef.current) {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const roomCode = params.get('room_code');
+    const playerName = gameForm.playerName.trim();
+    if (roomCode && playerName && isConnected && !gameState) {
+      autoJoinAttemptedRef.current = true;
+      setIsAutoJoining(true);
+      joinGame(roomCode.toUpperCase(), playerName);
+    }
+  }, [gameForm.playerName, isConnected, joinGame, gameState]);
+
+  useEffect(() => {
+    if (gameState) {
+      setIsAutoJoining(false);
+      return;
+    }
+    if (gameError && autoJoinAttemptedRef.current) {
+      setIsAutoJoining(false);
+      clearRoomCodeFromUrl();
+    }
+  }, [gameState, gameError]);
 
   // Auto-fill player name if user is authenticated
   useEffect(() => {
@@ -184,6 +232,14 @@ export const HomePage: React.FC = () => {
     }
   }, [authError, clearError]);
 
+  if (shouldShowLobby) {
+    return <Lobby />;
+  }
+
+  if (shouldShowGame) {
+    return <GameBoard />;
+  }
+
   return (
     <div className={styles.container}>
       {/* Header with user info or sign-in button */}
@@ -228,6 +284,9 @@ export const HomePage: React.FC = () => {
           <span className={`${styles.statusIndicator} ${isConnected ? styles.connected : styles.disconnected}`}>
             {isConnected ? '🟢 Connected' : '🔴 Connecting...'}
           </span>
+          {isAutoJoining && (
+            <span className={styles.statusText}>Rejoining room...</span>
+          )}
         </div>
 
         <div className={styles.gameTabs}>
@@ -469,4 +528,3 @@ export const HomePage: React.FC = () => {
     </div>
   );
 };
-

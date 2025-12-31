@@ -146,6 +146,13 @@
   color: #ef4444;
 }
 
+.statusText {
+  display: block;
+  margin-top: 6px;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.85rem;
+}
+
 .gameTabs {
   display: flex;
   background: rgba(255, 255, 255, 0.1);

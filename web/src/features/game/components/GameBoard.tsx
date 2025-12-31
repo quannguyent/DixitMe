@@ -11,11 +11,14 @@ export const GameBoard: React.FC = () => {
     submitClue,
     submitCard,
     leaveGame,
+    sendChat,
+    chatMessages,
   } = useGameStore();
 
   const [selectedCard, setSelectedCard] = useState<number | null>(null);
   const [clueText, setClueText] = useState('');
   const [showClueForm, setShowClueForm] = useState(false);
+  const [chatText, setChatText] = useState('');
 
   useEffect(() => {
     if (gameState?.current_round) {
@@ -49,6 +52,13 @@ export const GameBoard: React.FC = () => {
     if (gameState && window.confirm('Are you sure you want to leave the game?')) {
       leaveGame(gameState.room_code);
     }
+  };
+
+  const handleSendChat = () => {
+    if (!gameState) return;
+    if (!chatText.trim()) return;
+    sendChat(gameState.room_code, chatText.trim());
+    setChatText('');
   };
 
   const getGamePhase = () => {
@@ -203,6 +213,38 @@ export const GameBoard: React.FC = () => {
           </div>
         </div>
       )}
+
+      <div className="chat-panel">
+        <div className="chat-header">Chat</div>
+        <div className="chat-messages">
+          {chatMessages.length === 0 && (
+            <div className="chat-empty">No messages yet.</div>
+          )}
+          {chatMessages.map((msg) => (
+            <div key={msg.id} className="chat-message">
+              <span className="chat-name">{msg.player_name}:</span>
+              <span className="chat-text">{msg.message}</span>
+            </div>
+          ))}
+        </div>
+        <div className="chat-input">
+          <input
+            type="text"
+            value={chatText}
+            onChange={(e) => setChatText(e.target.value)}
+            placeholder="Type a message..."
+            maxLength={200}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                handleSendChat();
+              }
+            }}
+          />
+          <button onClick={handleSendChat} disabled={!chatText.trim()}>
+            Send
+          </button>
+        </div>
+      </div>
 
       <PlayerHand
         cards={currentPlayer.hand}

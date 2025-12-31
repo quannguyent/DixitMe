@@ -42,6 +42,29 @@
   color: #ef4444;
 }
 
+.statusText {
+  display: block;
+  margin-top: 4px;
+  color: #555;
+  font-size: 0.85rem;
+}
+
+.leaveBtn {
+  margin-top: 0.75rem;
+  padding: 0.5rem 0.9rem;
+  border: none;
+  border-radius: 8px;
+  background: #ef4444;
+  color: #fff;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.leaveBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .playersSection {
   margin-bottom: 2rem;
 }
