@@ -62,12 +62,14 @@ scripts/            # Utility scripts
 - Ends at 30 points or empty deck.
 
 ## Working Flow
-- Startup: `NewServer` wires DB/Redis, creates a single in-memory `Manager`, and connects it to the WebSocket hub.
+- Startup: `NewServer` wires DB/Redis, creates a `Manager`, and connects it to the WebSocket hub.
+- State model: FSM phases live on `GameState.Phase`: `LOBBY`, `STORYTELLER_SUBMIT`, `OTHERS_SUBMIT`, `VOTING`, `REVEAL_SCORE`, `ROUND_END`, `GAME_OVER`.
+- Persistence: live game state is persisted as JSONB in `games.state_snapshot` after each state change, with `games.version` used for optimistic concurrency.
+- History: normal relational tables (rounds, votes, game history, chat) remain for history/leaderboards and analytics.
 - Connect: client opens `GET /ws`; server replies with `connection_established` and stores the socket.
-- Create/Join: client sends `create_game` or `join_game`; server updates in-memory game state and returns `game_state`.
-- Gameplay: clients send `start_game`, `submit_clue`, `submit_card`, `submit_vote`, `leave_game`; server validates and broadcasts WS events.
+- Create/Join: client sends `create_game` or `join_game`; server loads the latest snapshot from Postgres, applies the command, and saves with a version check.
+- Gameplay: clients send `start_game`, `submit_clue`, `submit_card`, `submit_vote`, `leave_game`; server always loads the latest snapshot, applies, and saves with a version check, then broadcasts WS events.
 - Chat: client sends `send_chat` over WS; server persists and broadcasts `chat_message`.
-- Read-only data: HTTP endpoints serve game lists, stats, cards/tags, and chat history.
 
 ## Endpoint Design Notes
 - WebSocket is used for real-time game actions and live chat: create/join/start/leave game, submit clue/card/vote, send chat.

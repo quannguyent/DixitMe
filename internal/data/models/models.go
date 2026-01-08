@@ -1,6 +1,7 @@
 package model
 
 import (
+	"encoding/json"
 	"time"
 
 	"dixitme/internal/game/domain"
@@ -66,14 +67,16 @@ type Session struct {
 
 // Game represents a game session
 type Game struct {
-	ID           uuid.UUID         `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-	RoomCode     string            `json:"room_code" gorm:"unique;not null"`
-	Status       domain.GameStatus `json:"status" gorm:"default:'waiting'"`
-	CurrentRound int               `json:"current_round" gorm:"default:1"`
-	MaxRounds    int               `json:"max_rounds" gorm:"default:6"` // 3 players * 2 rounds each
-	CreatedAt    time.Time         `json:"created_at"`
-	UpdatedAt    time.Time         `json:"updated_at"`
-	DeletedAt    gorm.DeletedAt    `json:"-" gorm:"index"`
+	ID            uuid.UUID         `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	RoomCode      string            `json:"room_code" gorm:"unique;not null"`
+	Status        domain.GameStatus `json:"status" gorm:"default:'waiting'"`
+	StateSnapshot json.RawMessage   `json:"state_snapshot" gorm:"type:jsonb"`
+	Version       int               `json:"version" gorm:"default:1"`
+	CurrentRound  int               `json:"current_round" gorm:"default:1"`
+	MaxRounds     int               `json:"max_rounds" gorm:"default:6"` // 3 players * 2 rounds each
+	CreatedAt     time.Time         `json:"created_at"`
+	UpdatedAt     time.Time         `json:"updated_at"`
+	DeletedAt     gorm.DeletedAt    `json:"-" gorm:"index"`
 
 	// Relationships
 	Players []GamePlayer `json:"players" gorm:"foreignKey:GameID"`
@@ -182,12 +185,14 @@ type CardTag struct {
 
 // GameHistory stores completed games for statistics
 type GameHistory struct {
-	ID          uuid.UUID `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
-	GameID      uuid.UUID `json:"game_id" gorm:"type:uuid;not null"`
-	WinnerID    uuid.UUID `json:"winner_id" gorm:"type:uuid"`
-	TotalRounds int       `json:"total_rounds"`
-	Duration    int       `json:"duration"` // Duration in minutes
-	CreatedAt   time.Time `json:"created_at"`
+	ID          uuid.UUID       `json:"id" gorm:"type:uuid;primary_key;default:gen_random_uuid()"`
+	GameID      uuid.UUID       `json:"game_id" gorm:"type:uuid;not null"`
+	WinnerID    uuid.UUID       `json:"winner_id" gorm:"type:uuid"`
+	FinalScores json.RawMessage `json:"final_scores" gorm:"type:jsonb"`
+	UsedCards   json.RawMessage `json:"used_cards" gorm:"type:jsonb"`
+	TotalRounds int             `json:"total_rounds"`
+	Duration    int             `json:"duration"` // Duration in minutes
+	CreatedAt   time.Time       `json:"created_at"`
 
 	// Relationships
 	Game   Game   `json:"game" gorm:"foreignKey:GameID"`

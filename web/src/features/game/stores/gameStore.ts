@@ -362,15 +362,6 @@ function handleWebSocketMessage(
       }
       break;
 
-    case MessageTypes.PLAYER_JOINED:
-    case MessageTypes.PLAYER_LEFT:
-    case MessageTypes.ROUND_STARTED:
-    case MessageTypes.CLUE_SUBMITTED:
-    case MessageTypes.CARD_SUBMITTED:
-    case MessageTypes.VOTING_STARTED:
-    case MessageTypes.VOTE_SUBMITTED:
-    case MessageTypes.ROUND_COMPLETED:
-    case MessageTypes.GAME_COMPLETED:
     case MessageTypes.CHAT_MESSAGE:
       const chatMessage = message.payload as ChatMessage;
       set({ 

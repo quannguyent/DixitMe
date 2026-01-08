@@ -47,7 +47,6 @@ type CardScore struct {
 
 // BotManager manages all bot players
 type BotManager struct {
-	bots         map[uuid.UUID]*BotPlayer
 	dataProvider DataProvider
 }
 
@@ -60,7 +59,6 @@ func Initialize(provider DataProvider) {
 
 	// Initialize bot manager
 	botManager = &BotManager{
-		bots:         make(map[uuid.UUID]*BotPlayer),
 		dataProvider: provider,
 	}
 
@@ -74,32 +72,26 @@ func GetBotManager() *BotManager {
 		// Panic or return nil? For safety, return empty manager but it won't work well
 		// Ideally Initialize is required.
 		logger.Error("BotManager accessed before initialization")
-		return &BotManager{
-			bots: make(map[uuid.UUID]*BotPlayer),
-		}
+		return &BotManager{}
 	}
 	return botManager
 }
 
-// CreateBot creates a new bot player
-func (bm *BotManager) CreateBot(name string, difficulty BotDifficulty) *BotPlayer {
+// NewBot creates a new bot player instance without registry state.
+func (bm *BotManager) NewBot(id uuid.UUID, name string, difficulty BotDifficulty, gameID uuid.UUID, hand []int) *BotPlayer {
+	clonedHand := make([]int, len(hand))
+	copy(clonedHand, hand)
+
 	bot := &BotPlayer{
-		ID:           uuid.New(),
+		ID:           id,
 		Name:         name,
 		Difficulty:   difficulty,
-		Hand:         make([]int, 0),
+		GameID:       gameID,
+		Hand:         clonedHand,
 		dataProvider: bm.dataProvider,
 	}
 
-	bm.bots[bot.ID] = bot
-	logger.Info("Bot created", "bot_id", bot.ID, "name", name, "difficulty", difficulty)
-
 	return bot
-}
-
-// GetBot returns a bot by ID
-func (bm *BotManager) GetBot(botID uuid.UUID) *BotPlayer {
-	return bm.bots[botID]
 }
 
 // SelectCardForClue selects the best card for a given clue using heuristic analysis
@@ -574,10 +566,6 @@ func (bp *BotPlayer) UpdateHand(cardIDs []int) {
 }
 
 // SetGameID sets the game ID for the bot
-func (bp *BotPlayer) SetGameID(gameID uuid.UUID) {
-	bp.GameID = gameID
-}
-
 // GetBotNames returns a list of predefined bot names
 func GetBotNames() []string {
 	return []string{

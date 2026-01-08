@@ -39,9 +39,10 @@ func NewServer(cfg *config.Config) (*gin.Engine, error) {
 	gameRepo := postgres.NewGameRepository(db)
 	gameCache := redisstore.NewGameCache(redisClient)
 	jwtService := auth.NewJWTService(cfg.Auth.JWTSecret)
-	hub := ws.NewHub(jwtService)
-	manager := game.NewManager(gameRepo, gameCache, hub, cfg.DisconnectedPlayerTTL)
+	hub := ws.NewHub(jwtService, redisClient)
+	manager := game.NewManager(gameRepo, gameCache, hub)
 	hub.SetManager(manager)
+	handlers.InitManager(manager)
 
 	// Bot system uses DB-backed data provider
 	botRepo := postgres.NewBotRepository(db)

@@ -3,8 +3,10 @@ package postgres
 import (
 	"dixitme/internal/data/models"
 	"dixitme/internal/game/core"
-	"dixitme/internal/game/domain"
+	"encoding/json"
 	"errors"
+	"fmt"
+
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
@@ -18,27 +20,67 @@ func NewGameRepository(db *gorm.DB) *GameRepository {
 }
 
 func (r *GameRepository) CreateGame(g *game.GameState) error {
+	payload, err := json.Marshal(g)
+	if err != nil {
+		return err
+	}
 	dbGame := &model.Game{
-		ID:           g.ID,
-		RoomCode:     g.RoomCode,
-		Status:       g.Status,
-		CurrentRound: g.RoundNumber,
-		MaxRounds:    g.MaxRounds,
-		CreatedAt:    g.CreatedAt,
+		ID:            g.ID,
+		RoomCode:      g.RoomCode,
+		Status:        g.Status,
+		StateSnapshot: payload,
+		Version:       1,
+		CurrentRound:  g.RoundNumber,
+		MaxRounds:     g.MaxRounds,
+		CreatedAt:     g.CreatedAt,
 	}
 	return r.db.Create(dbGame).Error
 }
 
-func (r *GameRepository) GetGame(roomCode string) (*game.GameState, error) {
-	// This is a complex mapping from DB back to Domain.
-	// For now, Room logic often relies on in-memory state.
-	// If the server restarts, we need to load from DB.
-	// This implementation is a placeholder for full reconstruction.
-	return nil, errors.New("loading game from DB not fully implemented")
+func (r *GameRepository) LoadGameSnapshot(roomCode string) (*game.GameState, int, error) {
+	var dbGame model.Game
+	if err := r.db.Where("room_code = ?", roomCode).Take(&dbGame).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, 0, fmt.Errorf("game not found")
+		}
+		return nil, 0, err
+	}
+	if len(dbGame.StateSnapshot) == 0 {
+		return nil, 0, errors.New("game snapshot is empty")
+	}
+
+	var state game.GameState
+	if err := json.Unmarshal(dbGame.StateSnapshot, &state); err != nil {
+		return nil, 0, err
+	}
+	if state.ID == uuid.Nil {
+		state.ID = dbGame.ID
+	}
+	if state.RoomCode == "" {
+		state.RoomCode = dbGame.RoomCode
+	}
+	state.Version = dbGame.Version
+	return &state, dbGame.Version, nil
 }
 
-func (r *GameRepository) UpdateGameStatus(gameID uuid.UUID, status domain.GameStatus) error {
-	return r.db.Model(&model.Game{}).Where("id = ?", gameID).Update("status", status).Error
+func (r *GameRepository) TrySaveGameSnapshot(g *game.GameState, version int) (bool, error) {
+	payload, err := json.Marshal(g)
+	if err != nil {
+		return false, err
+	}
+	result := r.db.Model(&model.Game{}).
+		Where("id = ? AND version = ?", g.ID, version).
+		Updates(map[string]interface{}{
+			"state_snapshot": payload,
+			"status":         g.Status,
+			"current_round":  g.RoundNumber,
+			"max_rounds":     g.MaxRounds,
+			"version":        gorm.Expr("version + 1"),
+		})
+	if result.Error != nil {
+		return false, result.Error
+	}
+	return result.RowsAffected == 1, nil
 }
 
 func (r *GameRepository) AddPlayerToGame(gameID uuid.UUID, player *game.Player) error {
@@ -83,34 +125,22 @@ func (r *GameRepository) UpdateRound(round *game.Round) error {
 	}).Error
 }
 
-func (r *GameRepository) SaveCardSubmission(roundID, playerID uuid.UUID, cardID int) error {
-	submission := &model.CardSubmission{
-		RoundID:  roundID,
-		PlayerID: playerID,
-		CardID:   cardID,
+func (r *GameRepository) SaveGameCompletion(gameID, winnerID uuid.UUID, finalScores map[uuid.UUID]int, usedCards []int) error {
+	scoresPayload, err := json.Marshal(finalScores)
+	if err != nil {
+		return err
 	}
-	return r.db.Create(submission).Error
-}
-
-func (r *GameRepository) SaveVote(roundID, playerID uuid.UUID, cardID int) error {
-	vote := &model.Vote{
-		RoundID:  roundID,
-		PlayerID: playerID,
-		CardID:   cardID,
-	}
-	return r.db.Create(vote).Error
-}
-
-func (r *GameRepository) SaveGameCompletion(gameID, winnerID uuid.UUID) error {
-	// Update game status
-	if err := r.db.Model(&model.Game{}).Where("id = ?", gameID).Update("status", domain.GameStatusCompleted).Error; err != nil {
+	usedCardsPayload, err := json.Marshal(usedCards)
+	if err != nil {
 		return err
 	}
 
 	// Create game history
 	history := &model.GameHistory{
-		GameID:   gameID,
-		WinnerID: winnerID,
+		GameID:      gameID,
+		WinnerID:    winnerID,
+		FinalScores: scoresPayload,
+		UsedCards:   usedCardsPayload,
 		// Duration and TotalRounds would be calculated here
 	}
 	return r.db.Create(history).Error

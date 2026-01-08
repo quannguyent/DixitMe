@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useGameStore } from '../stores/gameStore';
 import { PlayerHand } from './PlayerHand';
 import { VotingPhase } from './VotingPhase';
@@ -19,20 +19,25 @@ export const GameBoard: React.FC = () => {
   const [clueText, setClueText] = useState('');
   const [showClueForm, setShowClueForm] = useState(false);
   const [chatText, setChatText] = useState('');
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (gameState?.current_round) {
-      const round = gameState.current_round;
-      const isStoryteller = currentPlayer?.id === round.storyteller_id;
-      
-      setShowClueForm(isStoryteller && round.status === 'storytelling');
-      
-      if (round.status !== 'storytelling') {
-        setSelectedCard(null);
-        setClueText('');
-      }
+    if (!gameState) return;
+    const round = gameState.current_round;
+    const isStoryteller = currentPlayer?.id === round?.storyteller_id;
+
+    setShowClueForm(!!round && isStoryteller && gameState.phase === 'STORYTELLER_SUBMIT');
+
+    if (gameState.phase !== 'STORYTELLER_SUBMIT') {
+      setSelectedCard(null);
+      setClueText('');
     }
-  }, [gameState?.current_round, currentPlayer]);
+  }, [gameState, currentPlayer]);
+
+  useEffect(() => {
+    if (!chatEndRef.current) return;
+    chatEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  }, [chatMessages.length]);
 
   const handleSubmitClue = () => {
     if (!gameState || !selectedCard || !clueText.trim()) return;
@@ -63,21 +68,25 @@ export const GameBoard: React.FC = () => {
 
   const getGamePhase = () => {
     if (!gameState?.current_round) return 'Waiting for game to start...';
-    
+
     const round = gameState.current_round;
     const isStoryteller = currentPlayer?.id === round.storyteller_id;
-    
-    switch (round.status) {
-      case 'storytelling':
+
+    switch (gameState.phase) {
+      case 'LOBBY':
+        return 'Waiting for game to start...';
+      case 'STORYTELLER_SUBMIT':
         return isStoryteller ? 'Choose a card and give a clue' : 'Waiting for storyteller...';
-      case 'submitting':
+      case 'OTHERS_SUBMIT':
         return isStoryteller ? 'Waiting for other players to submit cards...' : 'Choose a card that fits the clue';
-      case 'voting':
+      case 'VOTING':
         return isStoryteller ? 'Waiting for players to vote...' : 'Vote for the storyteller\'s card';
-      case 'scoring':
+      case 'REVEAL_SCORE':
         return 'Calculating scores...';
-      case 'completed':
+      case 'ROUND_END':
         return 'Round completed!';
+      case 'GAME_OVER':
+        return 'Game over!';
       default:
         return 'Unknown phase';
     }
@@ -94,8 +103,8 @@ export const GameBoard: React.FC = () => {
     const round = gameState.current_round;
     const isStoryteller = currentPlayer.id === round.storyteller_id;
     const hasSubmitted = round.submissions[currentPlayer.id];
-    
-    return !isStoryteller && round.status === 'submitting' && !hasSubmitted;
+
+    return !isStoryteller && gameState.phase === 'OTHERS_SUBMIT' && !hasSubmitted;
   };
 
   if (!gameState || !currentPlayer) {
@@ -169,7 +178,7 @@ export const GameBoard: React.FC = () => {
         </div>
       </div>
 
-      {gameState.current_round?.status === 'voting' && gameState.current_round.revealed_cards && (
+      {gameState.phase === 'VOTING' && gameState.current_round?.revealed_cards && (
         <VotingPhase
           revealedCards={gameState.current_round.revealed_cards}
           isStoryteller={currentPlayer.id === gameState.current_round.storyteller_id}
@@ -226,6 +235,7 @@ export const GameBoard: React.FC = () => {
               <span className="chat-text">{msg.message}</span>
             </div>
           ))}
+          <div ref={chatEndRef} />
         </div>
         <div className="chat-input">
           <input

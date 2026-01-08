@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
-	"sync"
 	"time"
 
 	"dixitme/internal/game/bot"
@@ -17,53 +16,150 @@ import (
 
 // Manager manages all active games
 type Manager struct {
-	games                 map[string]*GameState
-	mu                    sync.RWMutex
-	cleanupInterval       time.Duration
-	inactiveTimeout       time.Duration
-	disconnectedPlayerTTL time.Duration
-	stopCleanup           chan bool
-	repo                  GameRepository
-	cache                 GameCache
-	broadcaster           Broadcaster
+	repo        GameRepository
+	cache       GameCache
+	broadcaster Broadcaster
 }
 
-var defaultManager *Manager
-
 // NewManager constructs a game manager instance.
-func NewManager(repo GameRepository, cache GameCache, broadcaster Broadcaster, disconnectedPlayerTTL time.Duration) *Manager {
+func NewManager(repo GameRepository, cache GameCache, broadcaster Broadcaster) *Manager {
 	m := &Manager{
-		games:                 make(map[string]*GameState),
-		cleanupInterval:       2 * time.Minute,  // Check every 2 minutes
-		inactiveTimeout:       10 * time.Minute, // This will be dynamic based on room state
-		disconnectedPlayerTTL: disconnectedPlayerTTL,
-		stopCleanup:           make(chan bool),
-		repo:                  repo,
-		cache:                 cache,
-		broadcaster:           broadcaster,
-	}
-	go m.startCleanupService()
-	if defaultManager == nil {
-		defaultManager = m
+		repo:        repo,
+		cache:       cache,
+		broadcaster: broadcaster,
 	}
 	return m
 }
 
-// GetManager returns the default manager instance (for legacy callers).
-func GetManager() *Manager {
-	return defaultManager
+var phaseTransitions = map[domain.GamePhase]map[domain.GamePhase]bool{
+	domain.PhaseLobby: {
+		domain.PhaseStorytellerSubmit: true,
+	},
+	domain.PhaseStorytellerSubmit: {
+		domain.PhaseOthersSubmit: true,
+	},
+	domain.PhaseOthersSubmit: {
+		domain.PhaseVoting: true,
+	},
+	domain.PhaseVoting: {
+		domain.PhaseRevealScore: true,
+	},
+	domain.PhaseRevealScore: {
+		domain.PhaseRoundEnd: true,
+		domain.PhaseGameOver: true,
+	},
+	domain.PhaseRoundEnd: {
+		domain.PhaseStorytellerSubmit: true,
+	},
+}
+
+type phaseOptions struct {
+	abandoned bool
+}
+
+func setPhase(game *GameState, next domain.GamePhase, opts ...phaseOptions) error {
+	if game == nil {
+		return fmt.Errorf("game is nil")
+	}
+	normalizePhase(game)
+	if game.Phase == next {
+		return nil
+	}
+	allowed := phaseTransitions[game.Phase]
+	if allowed == nil || !allowed[next] {
+		return fmt.Errorf("invalid phase transition: %s -> %s", game.Phase, next)
+	}
+	game.Phase = next
+	if len(opts) > 0 && next == domain.PhaseGameOver {
+		game.Abandoned = opts[0].abandoned
+	}
+	syncPhase(game)
+	return nil
+}
+
+func normalizePhase(game *GameState) {
+	if game == nil || game.Phase != "" {
+		return
+	}
+
+	switch game.Status {
+	case domain.GameStatusWaiting:
+		game.Phase = domain.PhaseLobby
+	case domain.GameStatusCompleted, domain.GameStatusAbandoned:
+		game.Phase = domain.PhaseGameOver
+		game.Abandoned = game.Status == domain.GameStatusAbandoned
+	case domain.GameStatusInProgress:
+		if game.CurrentRound == nil {
+			game.Phase = domain.PhaseStorytellerSubmit
+			return
+		}
+		switch game.CurrentRound.Status {
+		case domain.RoundStatusStorytelling:
+			game.Phase = domain.PhaseStorytellerSubmit
+		case domain.RoundStatusSubmitting:
+			game.Phase = domain.PhaseOthersSubmit
+		case domain.RoundStatusVoting:
+			game.Phase = domain.PhaseVoting
+		case domain.RoundStatusScoring:
+			game.Phase = domain.PhaseRevealScore
+		case domain.RoundStatusCompleted:
+			game.Phase = domain.PhaseRoundEnd
+		default:
+			game.Phase = domain.PhaseStorytellerSubmit
+		}
+	default:
+		game.Phase = domain.PhaseLobby
+	}
+}
+
+func syncPhase(game *GameState) {
+	switch game.Phase {
+	case domain.PhaseLobby:
+		game.Status = domain.GameStatusWaiting
+	case domain.PhaseGameOver:
+		if game.Abandoned {
+			game.Status = domain.GameStatusAbandoned
+		} else {
+			game.Status = domain.GameStatusCompleted
+		}
+	default:
+		game.Status = domain.GameStatusInProgress
+	}
+
+	if game.CurrentRound == nil {
+		return
+	}
+	switch game.Phase {
+	case domain.PhaseStorytellerSubmit:
+		game.CurrentRound.Status = domain.RoundStatusStorytelling
+	case domain.PhaseOthersSubmit:
+		game.CurrentRound.Status = domain.RoundStatusSubmitting
+	case domain.PhaseVoting:
+		game.CurrentRound.Status = domain.RoundStatusVoting
+	case domain.PhaseRevealScore:
+		game.CurrentRound.Status = domain.RoundStatusScoring
+	case domain.PhaseRoundEnd, domain.PhaseGameOver:
+		game.CurrentRound.Status = domain.RoundStatusCompleted
+	}
+}
+
+func (m *Manager) persistSnapshot(game *GameState) error {
+	if m.repo == nil {
+		return nil
+	}
+	ok, err := m.repo.TrySaveGameSnapshot(game, game.Version)
+	if err != nil {
+		return fmt.Errorf("failed to save game snapshot: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("game state conflict")
+	}
+	game.Version++
+	return nil
 }
 
 // CreateGame creates a new game with the given room code
 func (m *Manager) CreateGame(roomCode string, creatorID uuid.UUID, creatorName string) (*GameState, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	// Check if room code already exists
-	if _, exists := m.games[roomCode]; exists {
-		return nil, fmt.Errorf("room code already exists")
-	}
-
 	// Create new game state
 	gameID := uuid.New()
 	now := time.Now()
@@ -83,7 +179,7 @@ func (m *Manager) CreateGame(roomCode string, creatorID uuid.UUID, creatorName s
 		ID:           gameID,
 		RoomCode:     roomCode,
 		Players:      make(map[uuid.UUID]*Player),
-		Status:       domain.GameStatusWaiting,
+		Phase:        domain.PhaseLobby,
 		RoundNumber:  0,
 		MaxRounds:    999, // Will be determined by 30 points or empty deck
 		Deck:         deck,
@@ -105,13 +201,11 @@ func (m *Manager) CreateGame(roomCode string, creatorID uuid.UUID, creatorName s
 	}
 
 	game.Players[creatorID] = creator
-
-	// Store in memory
-	m.games[roomCode] = game
+	syncPhase(game)
+	game.Version = 1
 
 	// Persist to database
 	if err := m.repo.CreateGame(game); err != nil {
-		delete(m.games, roomCode)
 		// Check if it's a duplicate key error (would need to check error string/type from repo)
 		if strings.Contains(err.Error(), "duplicate key") || strings.Contains(err.Error(), "already taken") {
 			return nil, fmt.Errorf("room code '%s' is already taken, please try a different one", roomCode)
@@ -120,8 +214,10 @@ func (m *Manager) CreateGame(roomCode string, creatorID uuid.UUID, creatorName s
 	}
 
 	if err := m.repo.AddPlayerToGame(game.ID, creator); err != nil {
-		delete(m.games, roomCode)
 		return nil, fmt.Errorf("failed to add creator to game: %w", err)
+	}
+	if err := m.persistSnapshot(game); err != nil {
+		return nil, err
 	}
 
 	// Store in Redis for scaling
@@ -132,24 +228,30 @@ func (m *Manager) CreateGame(roomCode string, creatorID uuid.UUID, creatorName s
 	return game, nil
 }
 
+func (m *Manager) loadSnapshot(roomCode string) (*GameState, int, error) {
+	if m.repo == nil {
+		return nil, 0, fmt.Errorf("repository not configured")
+	}
+	game, version, err := m.repo.LoadGameSnapshot(roomCode)
+	if err != nil {
+		return nil, 0, err
+	}
+	game.Version = version
+	return game, version, nil
+}
+
 // JoinGame adds a player to an existing game
 func (m *Manager) JoinGame(roomCode string, playerID uuid.UUID, playerName string) (*GameState, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	game, exists := m.games[roomCode]
-	if !exists {
-		return nil, fmt.Errorf("game not found")
+	game, _, err := m.loadSnapshot(roomCode)
+	if err != nil {
+		return nil, err
 	}
-
-	game.mu.Lock()
-	defer game.mu.Unlock()
 
 	// Update activity
 	game.LastActivity = time.Now()
 
 	// Handle reconnection
-	if game.Status == domain.GameStatusWaiting || game.Status == domain.GameStatusInProgress {
+	if game.Phase != domain.PhaseGameOver {
 		if player, exists := game.Players[playerID]; exists && !player.IsConnected {
 			// Allow reconnection
 			player.IsConnected = true
@@ -161,12 +263,15 @@ func (m *Manager) JoinGame(roomCode string, playerID uuid.UUID, playerName strin
 			// Send system message
 			m.SendSystemMessage(roomCode, fmt.Sprintf("%s rejoined the game", playerName))
 
+			if err := m.persistSnapshot(game); err != nil {
+				return nil, err
+			}
 			return game, nil
 		}
 	}
 
 	// Check if game is still accepting players
-	if game.Status != domain.GameStatusWaiting {
+	if game.Phase != domain.PhaseLobby {
 		return nil, fmt.Errorf("game already started")
 	}
 
@@ -199,6 +304,10 @@ func (m *Manager) JoinGame(roomCode string, playerID uuid.UUID, playerName strin
 		delete(game.Players, playerID)
 		return nil, fmt.Errorf("failed to persist player: %w", err)
 	}
+	if err := m.persistSnapshot(game); err != nil {
+		delete(game.Players, playerID)
+		return nil, err
+	}
 
 	// Update Redis
 	if err := m.cache.SetGame(context.Background(), game); err != nil {
@@ -216,17 +325,12 @@ func (m *Manager) JoinGame(roomCode string, playerID uuid.UUID, playerName strin
 
 // MarkPlayerDisconnected marks a player as disconnected and keeps them in the room.
 func (m *Manager) MarkPlayerDisconnected(roomCode string, playerID uuid.UUID) error {
-	m.mu.RLock()
-	game, exists := m.games[roomCode]
-	m.mu.RUnlock()
-	if !exists {
-		return fmt.Errorf("game not found")
+	game, _, err := m.loadSnapshot(roomCode)
+	if err != nil {
+		return err
 	}
-
-	game.Lock()
 	player, inGame := game.Players[playerID]
 	if !inGame {
-		game.Unlock()
 		return fmt.Errorf("player not in game")
 	}
 
@@ -235,8 +339,10 @@ func (m *Manager) MarkPlayerDisconnected(roomCode string, playerID uuid.UUID) er
 	player.IsActive = false
 	player.DisconnectedAt = &now
 	game.LastActivity = now
-	game.Unlock()
 
+	if err := m.persistSnapshot(game); err != nil {
+		return err
+	}
 	if m.cache != nil {
 		if err := m.cache.SetGame(context.Background(), game); err != nil {
 			logger.Error("Failed to update game cache after disconnect", "error", err, "room_code", roomCode)
@@ -250,25 +356,22 @@ func (m *Manager) MarkPlayerDisconnected(roomCode string, playerID uuid.UUID) er
 
 // LeaveGame removes a player from an active game and notifies the room.
 func (m *Manager) LeaveGame(roomCode string, playerID uuid.UUID) error {
-	m.mu.RLock()
-	game, exists := m.games[roomCode]
-	m.mu.RUnlock()
-	if !exists {
-		return fmt.Errorf("game not found")
+	game, _, err := m.loadSnapshot(roomCode)
+	if err != nil {
+		return err
 	}
-
-	game.Lock()
 	player, inGame := game.Players[playerID]
 	if !inGame {
-		game.Unlock()
 		return fmt.Errorf("player not in game")
 	}
 
 	delete(game.Players, playerID)
 	game.LastActivity = time.Now()
 	remaining := len(game.Players)
-	game.Unlock()
 
+	if err := m.persistSnapshot(game); err != nil {
+		return err
+	}
 	if m.cache != nil {
 		if err := m.cache.SetGame(context.Background(), game); err != nil {
 			logger.Error("Failed to update game cache after leave", "error", err, "room_code", roomCode)
@@ -279,9 +382,6 @@ func (m *Manager) LeaveGame(roomCode string, playerID uuid.UUID) error {
 	m.SendSystemMessage(roomCode, fmt.Sprintf("%s left the game", player.Name))
 
 	if remaining == 0 {
-		m.mu.Lock()
-		delete(m.games, roomCode)
-		m.mu.Unlock()
 	}
 
 	return nil
@@ -289,18 +389,12 @@ func (m *Manager) LeaveGame(roomCode string, playerID uuid.UUID) error {
 
 // AddBot adds a bot player to an existing game
 func (m *Manager) AddBot(roomCode string, botLevel string) (*GameState, error) {
-	m.mu.RLock()
-	game, exists := m.games[roomCode]
-	m.mu.RUnlock()
-
-	if !exists {
-		return nil, fmt.Errorf("game not found")
+	game, _, err := m.loadSnapshot(roomCode)
+	if err != nil {
+		return nil, err
 	}
 
-	game.Lock()
-	defer game.Unlock()
-
-	if game.Status != domain.GameStatusWaiting {
+	if game.Phase != domain.PhaseLobby {
 		return nil, fmt.Errorf("cannot add bot to game in progress")
 	}
 
@@ -330,16 +424,12 @@ func (m *Manager) AddBot(roomCode string, botLevel string) (*GameState, error) {
 	botID := uuid.New()
 
 	// Create bot in bot manager
-	botManager := bot.GetBotManager()
-	botPlayer := botManager.CreateBot(botName, bot.BotDifficulty(botLevel))
-	botPlayer.SetGameID(game.ID)
-
 	// Create game player
 	player := &Player{
 		ID:             botID,
 		Name:           botName,
 		Score:          0,
-		Position:       len(game.Players),
+		Position:       len(game.Players) + 1,
 		Hand:           make([]int, 0),
 		IsConnected:    true, // Bots are always "connected"
 		DisconnectedAt: nil,
@@ -355,6 +445,10 @@ func (m *Manager) AddBot(roomCode string, botLevel string) (*GameState, error) {
 	if err := m.repo.AddPlayerToGame(game.ID, player); err != nil {
 		delete(game.Players, botID)
 		return nil, fmt.Errorf("failed to persist bot player: %w", err)
+	}
+	if err := m.persistSnapshot(game); err != nil {
+		delete(game.Players, botID)
+		return nil, err
 	}
 
 	// Update Redis
@@ -375,16 +469,10 @@ func (m *Manager) AddBot(roomCode string, botLevel string) (*GameState, error) {
 
 // StartGame starts a game if conditions are met
 func (m *Manager) StartGame(roomCode string, playerID uuid.UUID) error {
-	m.mu.RLock()
-	game, exists := m.games[roomCode]
-	m.mu.RUnlock()
-
-	if !exists {
-		return fmt.Errorf("game not found")
+	game, _, err := m.loadSnapshot(roomCode)
+	if err != nil {
+		return err
 	}
-
-	game.mu.Lock()
-	defer game.mu.Unlock()
 
 	// Update activity
 	game.LastActivity = time.Now()
@@ -399,12 +487,14 @@ func (m *Manager) StartGame(roomCode string, playerID uuid.UUID) error {
 		return fmt.Errorf("need at least 3 players to start")
 	}
 
-	if game.Status != domain.GameStatusWaiting {
+	if game.Phase != domain.PhaseLobby {
 		return fmt.Errorf("game already started")
 	}
 
 	// Initialize game
-	game.Status = domain.GameStatusInProgress
+	if err := setPhase(game, domain.PhaseStorytellerSubmit); err != nil {
+		return fmt.Errorf("failed to start game: %w", err)
+	}
 
 	// Deal cards to players
 	m.dealCards(game)
@@ -414,9 +504,8 @@ func (m *Manager) StartGame(roomCode string, playerID uuid.UUID) error {
 		return fmt.Errorf("failed to start first round: %w", err)
 	}
 
-	// Update database
-	if err := m.repo.UpdateGameStatus(game.ID, domain.GameStatusInProgress); err != nil {
-		return fmt.Errorf("failed to update game status: %w", err)
+	if err := m.persistSnapshot(game); err != nil {
+		return err
 	}
 
 	// Broadcast game started
@@ -424,19 +513,17 @@ func (m *Manager) StartGame(roomCode string, playerID uuid.UUID) error {
 
 	// Send system message
 	m.SendSystemMessage(roomCode, "Game started! Let the storytelling begin!")
+	m.ProcessBotActions(game)
 
 	return nil
 }
 
 // SubmitClue handles storyteller submitting a clue
 func (m *Manager) SubmitClue(roomCode string, playerID uuid.UUID, clue string, cardID int) error {
-	game := m.getGame(roomCode)
-	if game == nil {
-		return fmt.Errorf("game not found")
+	game, _, err := m.loadSnapshot(roomCode)
+	if err != nil {
+		return err
 	}
-
-	game.mu.Lock()
-	defer game.mu.Unlock()
 
 	if game.CurrentRound == nil {
 		return fmt.Errorf("no active round")
@@ -446,7 +533,7 @@ func (m *Manager) SubmitClue(roomCode string, playerID uuid.UUID, clue string, c
 		return fmt.Errorf("only storyteller can submit clue")
 	}
 
-	if game.CurrentRound.Status != domain.RoundStatusStorytelling {
+	if game.Phase != domain.PhaseStorytellerSubmit {
 		return fmt.Errorf("not in storytelling phase")
 	}
 
@@ -467,7 +554,9 @@ func (m *Manager) SubmitClue(roomCode string, playerID uuid.UUID, clue string, c
 	// Set clue and storyteller card
 	game.CurrentRound.Clue = clue
 	game.CurrentRound.StorytellerCard = cardID
-	game.CurrentRound.Status = domain.RoundStatusSubmitting
+	if err := setPhase(game, domain.PhaseOthersSubmit); err != nil {
+		return fmt.Errorf("failed to advance phase: %w", err)
+	}
 
 	// Remove card from storyteller's hand and add to used cards
 	for i, handCard := range player.Hand {
@@ -482,22 +571,25 @@ func (m *Manager) SubmitClue(roomCode string, playerID uuid.UUID, clue string, c
 	if err := m.repo.UpdateRound(game.CurrentRound); err != nil {
 		return fmt.Errorf("failed to update round: %w", err)
 	}
+	if err := m.persistSnapshot(game); err != nil {
+		return err
+	}
 
 	// Broadcast clue submitted
 	m.BroadcastToGame(game, MessageTypeClueSubmitted, ClueSubmittedPayload{Clue: clue})
+	m.BroadcastToGame(game, MessageTypeGameState, GameStatePayload{GameState: game})
+	m.sendSystemMessageWithGame(game, fmt.Sprintf("Storyteller submitted a clue. Others can now submit cards."))
+	m.ProcessBotActions(game)
 
 	return nil
 }
 
 // SubmitCard handles non-storyteller players submitting cards
 func (m *Manager) SubmitCard(roomCode string, playerID uuid.UUID, cardID int) error {
-	game := m.getGame(roomCode)
-	if game == nil {
-		return fmt.Errorf("game not found")
+	game, _, err := m.loadSnapshot(roomCode)
+	if err != nil {
+		return err
 	}
-
-	game.mu.Lock()
-	defer game.mu.Unlock()
 
 	if game.CurrentRound == nil {
 		return fmt.Errorf("no active round")
@@ -507,7 +599,7 @@ func (m *Manager) SubmitCard(roomCode string, playerID uuid.UUID, cardID int) er
 		return fmt.Errorf("storyteller cannot submit cards")
 	}
 
-	if game.CurrentRound.Status != domain.RoundStatusSubmitting {
+	if game.Phase != domain.PhaseOthersSubmit {
 		return fmt.Errorf("not in card submission phase")
 	}
 
@@ -545,32 +637,31 @@ func (m *Manager) SubmitCard(roomCode string, playerID uuid.UUID, cardID int) er
 		}
 	}
 
-	// Persist submission
-	if err := m.repo.SaveCardSubmission(game.CurrentRound.ID, playerID, cardID); err != nil {
-		return fmt.Errorf("failed to persist submission: %w", err)
-	}
-
 	// Check if all players submitted
 	expectedSubmissions := len(game.Players) - 1 // Exclude storyteller
 	if len(game.CurrentRound.Submissions) == expectedSubmissions {
 		m.startVotingPhase(game)
 	}
+	if err := m.persistSnapshot(game); err != nil {
+		return err
+	}
 
 	// Broadcast card submitted
 	m.BroadcastToGame(game, MessageTypeCardSubmitted, CardSubmittedPayload{PlayerID: playerID})
+	m.BroadcastToGame(game, MessageTypeGameState, GameStatePayload{GameState: game})
+	if len(game.CurrentRound.Submissions) == expectedSubmissions {
+		m.sendSystemMessageWithGame(game, "All cards submitted. Voting started.")
+	}
 
 	return nil
 }
 
 // SubmitVote handles player voting
 func (m *Manager) SubmitVote(roomCode string, playerID uuid.UUID, cardID int) error {
-	game := m.getGame(roomCode)
-	if game == nil {
-		return fmt.Errorf("game not found")
+	game, _, err := m.loadSnapshot(roomCode)
+	if err != nil {
+		return err
 	}
-
-	game.mu.Lock()
-	defer game.mu.Unlock()
 
 	if game.CurrentRound == nil {
 		return fmt.Errorf("no active round")
@@ -580,7 +671,7 @@ func (m *Manager) SubmitVote(roomCode string, playerID uuid.UUID, cardID int) er
 		return fmt.Errorf("storyteller cannot vote")
 	}
 
-	if game.CurrentRound.Status != domain.RoundStatusVoting {
+	if game.Phase != domain.PhaseVoting {
 		return fmt.Errorf("not in voting phase")
 	}
 
@@ -608,19 +699,21 @@ func (m *Manager) SubmitVote(roomCode string, playerID uuid.UUID, cardID int) er
 		CardID:   cardID,
 	}
 
-	// Persist vote
-	if err := m.repo.SaveVote(game.CurrentRound.ID, playerID, cardID); err != nil {
-		return fmt.Errorf("failed to persist vote: %w", err)
-	}
-
 	// Check if all players voted
 	expectedVotes := len(game.Players) - 1 // Exclude storyteller
 	if len(game.CurrentRound.Votes) == expectedVotes {
 		m.completeRound(game)
 	}
+	if err := m.persistSnapshot(game); err != nil {
+		return err
+	}
 
 	// Broadcast vote submitted
 	m.BroadcastToGame(game, MessageTypeVoteSubmitted, VoteSubmittedPayload{PlayerID: playerID})
+	m.BroadcastToGame(game, MessageTypeGameState, GameStatePayload{GameState: game})
+	if len(game.CurrentRound.Votes) == expectedVotes {
+		m.sendSystemMessageWithGame(game, "All votes submitted.")
+	}
 
 	return nil
 }
@@ -628,19 +721,15 @@ func (m *Manager) SubmitVote(roomCode string, playerID uuid.UUID, cardID int) er
 // Helper methods
 
 func (m *Manager) GetGame(roomCode string) *GameState {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return m.games[roomCode]
+	game, _, err := m.loadSnapshot(roomCode)
+	if err != nil {
+		return nil
+	}
+	return game
 }
 
 func (m *Manager) getGame(roomCode string) *GameState {
 	return m.GetGame(roomCode)
-}
-
-func (m *Manager) GetActiveGamesCount() int {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return len(m.games)
 }
 
 func (m *Manager) dealCards(game *GameState) {
@@ -696,13 +785,15 @@ func (m *Manager) startNewRound(game *GameState) error {
 		ID:            uuid.New(),
 		RoundNumber:   game.RoundNumber,
 		StorytellerID: storytellerID,
-		Status:        domain.RoundStatusStorytelling,
 		Submissions:   make(map[uuid.UUID]*CardSubmission),
 		Votes:         make(map[uuid.UUID]*Vote),
 		CreatedAt:     time.Now(),
 	}
 
 	game.CurrentRound = round
+	if err := setPhase(game, domain.PhaseStorytellerSubmit); err != nil {
+		return err
+	}
 
 	// Persist round
 	if err := m.repo.SaveRound(game.ID, round); err != nil {
@@ -711,12 +802,17 @@ func (m *Manager) startNewRound(game *GameState) error {
 
 	// Broadcast round started
 	m.BroadcastToGame(game, MessageTypeRoundStarted, RoundStartedPayload{Round: round})
+	m.BroadcastToGame(game, MessageTypeGameState, GameStatePayload{GameState: game})
+	m.sendSystemMessageWithGame(game, fmt.Sprintf("Round %d started. Storyteller: %s", round.RoundNumber, storytellerName(game, storytellerID)))
 
 	return nil
 }
 
 func (m *Manager) startVotingPhase(game *GameState) {
-	game.CurrentRound.Status = domain.RoundStatusVoting
+	if err := setPhase(game, domain.PhaseVoting); err != nil {
+		logger.Error("Failed to advance to voting phase", "error", err, "room_code", game.RoomCode)
+		return
+	}
 
 	// Prepare revealed cards (shuffle them)
 	var revealedCards []RevealedCard
@@ -746,10 +842,15 @@ func (m *Manager) startVotingPhase(game *GameState) {
 	m.BroadcastToGame(game, MessageTypeVotingStarted, VotingStartedPayload{
 		RevealedCards: revealedCards,
 	})
+	m.BroadcastToGame(game, MessageTypeGameState, GameStatePayload{GameState: game})
+	m.ProcessBotActions(game)
 }
 
 func (m *Manager) completeRound(game *GameState) {
-	game.CurrentRound.Status = domain.RoundStatusScoring
+	if err := setPhase(game, domain.PhaseRevealScore); err != nil {
+		logger.Error("Failed to advance to reveal score phase", "error", err, "room_code", game.RoomCode)
+		return
+	}
 
 	// Calculate scores
 	scores := m.calculateScores(game)
@@ -776,6 +877,12 @@ func (m *Manager) completeRound(game *GameState) {
 		Scores:        scores,
 		RevealedCards: game.CurrentRound.RevealedCards,
 	})
+	m.BroadcastToGame(game, MessageTypeGameState, GameStatePayload{GameState: game})
+
+	roundScoreMessage := buildRoundScoreMessage(game, scores)
+	if roundScoreMessage != "" {
+		m.sendSystemMessageWithGame(game, roundScoreMessage)
+	}
 
 	// Check if game should end according to Dixit rules:
 	// 1. Any player reaches 30 points
@@ -823,13 +930,56 @@ func (m *Manager) completeRound(game *GameState) {
 		// Send end reason message
 		m.SendSystemMessage(game.RoomCode, endReason)
 		m.completeGame(game)
-	} else {
-		// Start next round after a delay
-		go func() {
-			time.Sleep(5 * time.Second)
-			m.startNewRound(game)
-		}()
+		return
 	}
+
+	if err := setPhase(game, domain.PhaseRoundEnd); err != nil {
+		logger.Error("Failed to advance to round end phase", "error", err, "room_code", game.RoomCode)
+		return
+	}
+
+	// Start next round after a delay
+	go func() {
+		time.Sleep(5 * time.Second)
+		m.advanceToNextRound(game.RoomCode)
+	}()
+}
+
+func buildRoundScoreMessage(game *GameState, scores map[uuid.UUID]int) string {
+	if game == nil || len(scores) == 0 {
+		return ""
+	}
+
+	var parts []string
+	for playerID, delta := range scores {
+		player, exists := game.Players[playerID]
+		if !exists {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("%s +%d", player.Name, delta))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return fmt.Sprintf("Round %d scores: %s", game.RoundNumber, strings.Join(parts, ", "))
+}
+
+func (m *Manager) advanceToNextRound(roomCode string) {
+	game, _, err := m.loadSnapshot(roomCode)
+	if err != nil {
+		logger.Error("Failed to load snapshot for next round", "error", err, "room_code", roomCode)
+		return
+	}
+	game.LastActivity = time.Now()
+	if err := m.startNewRound(game); err != nil {
+		logger.Error("Failed to start next round", "error", err, "room_code", roomCode)
+		return
+	}
+	if err := m.persistSnapshot(game); err != nil {
+		logger.Error("Failed to persist snapshot for next round", "error", err, "room_code", roomCode)
+		return
+	}
+	m.ProcessBotActions(game)
 }
 
 func (m *Manager) calculateScores(game *GameState) map[uuid.UUID]int {
@@ -885,7 +1035,9 @@ func (m *Manager) calculateScores(game *GameState) map[uuid.UUID]int {
 }
 
 func (m *Manager) completeGame(game *GameState) {
-	game.Status = domain.GameStatusCompleted
+	if err := setPhase(game, domain.PhaseGameOver, phaseOptions{abandoned: false}); err != nil {
+		logger.Error("Failed to advance to game over phase", "error", err, "room_code", game.RoomCode)
+	}
 
 	// Find winner (highest score)
 	var winnerID uuid.UUID
@@ -912,10 +1064,7 @@ func (m *Manager) completeGame(game *GameState) {
 		"cards_used", len(game.UsedCards))
 
 	// Persist game completion
-	if err := m.repo.UpdateGameStatus(game.ID, domain.GameStatusCompleted); err != nil {
-		logger.Error("Failed to update game status to completed", "error", err, "game_id", game.ID)
-	}
-	if err := m.repo.SaveGameCompletion(game.ID, winnerID); err != nil {
+	if err := m.repo.SaveGameCompletion(game.ID, winnerID, finalScores, game.UsedCards); err != nil {
 		logger.Error("Failed to persist game completion", "error", err, "game_id", game.ID, "winner_id", winnerID)
 	}
 
@@ -924,14 +1073,20 @@ func (m *Manager) completeGame(game *GameState) {
 		FinalScores: finalScores,
 		Winner:      winnerID,
 	})
+	if winnerName != "" {
+		m.sendSystemMessageWithGame(game, fmt.Sprintf("Game over! Winner: %s", winnerName))
+	}
 
-	// Clean up game from memory after some time
-	go func() {
-		time.Sleep(10 * time.Minute)
-		m.mu.Lock()
-		delete(m.games, game.RoomCode)
-		m.mu.Unlock()
-	}()
+}
+
+func storytellerName(game *GameState, storytellerID uuid.UUID) string {
+	if game == nil {
+		return ""
+	}
+	if player, ok := game.Players[storytellerID]; ok {
+		return player.Name
+	}
+	return ""
 }
 
 func (m *Manager) BroadcastToGame(game *GameState, messageType MessageType, payload interface{}) {
@@ -952,12 +1107,12 @@ func (m *Manager) ProcessBotActions(game *GameState) {
 		return
 	}
 
-	switch game.CurrentRound.Status {
-	case domain.RoundStatusStorytelling:
+	switch game.Phase {
+	case domain.PhaseStorytellerSubmit:
 		m.processBotStorytelling(game)
-	case domain.RoundStatusSubmitting:
+	case domain.PhaseOthersSubmit:
 		m.processBotSubmissions(game)
-	case domain.RoundStatusVoting:
+	case domain.PhaseVoting:
 		m.processBotVoting(game)
 	}
 }
@@ -977,14 +1132,7 @@ func (m *Manager) processBotStorytelling(game *GameState) {
 		time.Sleep(time.Duration(2+rand.Intn(3)) * time.Second)
 
 		botManager := bot.GetBotManager()
-		botPlayer := botManager.GetBot(storytellerID)
-		if botPlayer == nil {
-			logger.Error("Bot player not found", "bot_id", storytellerID)
-			return
-		}
-
-		// Update bot's hand
-		botPlayer.UpdateHand(storyteller.Hand)
+		botPlayer := botManager.NewBot(storytellerID, storyteller.Name, bot.BotDifficulty(storyteller.BotLevel), game.ID, storyteller.Hand)
 
 		// Bot selects card and generates clue
 		selectedCard, clue, err := botPlayer.SelectCardAsStoryteller()
@@ -1017,17 +1165,10 @@ func (m *Manager) processBotSubmissions(game *GameState) {
 			time.Sleep(time.Duration(3+rand.Intn(5)) * time.Second)
 
 			botManager := bot.GetBotManager()
-			bot := botManager.GetBot(botID)
-			if bot == nil {
-				logger.Error("Bot player not found", "bot_id", botID)
-				return
-			}
-
-			// Update bot's hand
-			bot.UpdateHand(botPlayer.Hand)
+			botInstance := botManager.NewBot(botID, botPlayer.Name, bot.BotDifficulty(botPlayer.BotLevel), game.ID, botPlayer.Hand)
 
 			// Bot selects card for clue
-			selectedCard, err := bot.SelectCardForClue(game.CurrentRound.Clue)
+			selectedCard, err := botInstance.SelectCardForClue(game.CurrentRound.Clue)
 			if err != nil {
 				logger.Error("Bot failed to select card for clue", "error", err, "bot_id", botID)
 				return
@@ -1058,11 +1199,7 @@ func (m *Manager) processBotVoting(game *GameState) {
 			time.Sleep(time.Duration(2+rand.Intn(4)) * time.Second)
 
 			botManager := bot.GetBotManager()
-			bot := botManager.GetBot(botID)
-			if bot == nil {
-				logger.Error("Bot player not found", "bot_id", botID)
-				return
-			}
+			botInstance := botManager.NewBot(botID, botPlayer.Name, bot.BotDifficulty(botPlayer.BotLevel), game.ID, botPlayer.Hand)
 
 			// Get submitted cards for voting
 			submittedCards := make([]int, 0, len(game.CurrentRound.RevealedCards))
@@ -1071,7 +1208,7 @@ func (m *Manager) processBotVoting(game *GameState) {
 			}
 
 			// Bot votes for card
-			selectedCard, err := bot.VoteForCard(submittedCards, game.CurrentRound.Clue, game.CurrentRound.StorytellerCard)
+			selectedCard, err := botInstance.VoteForCard(submittedCards, game.CurrentRound.Clue, game.CurrentRound.StorytellerCard)
 			if err != nil {
 				logger.Error("Bot failed to vote for card", "error", err, "bot_id", botID)
 				return
@@ -1090,9 +1227,9 @@ func (m *Manager) processBotVoting(game *GameState) {
 
 // SendChatMessage handles sending chat messages in a game
 func (m *Manager) SendChatMessage(roomCode string, playerID uuid.UUID, message string, messageType string) error {
-	game := m.getGame(roomCode)
-	if game == nil {
-		return fmt.Errorf("game not found")
+	game, _, err := m.loadSnapshot(roomCode)
+	if err != nil {
+		return err
 	}
 
 	player, exists := game.Players[playerID]
@@ -1117,14 +1254,11 @@ func (m *Manager) SendChatMessage(roomCode string, playerID uuid.UUID, message s
 	}
 
 	// Determine current phase
-	currentPhase := "lobby"
-	if game.Status == domain.GameStatusInProgress && game.CurrentRound != nil {
-		currentPhase = string(game.CurrentRound.Status)
-	}
+	currentPhase := strings.ToLower(string(game.Phase))
 
-	// Only allow chat in lobby and voting phases
-	if currentPhase != "lobby" && currentPhase != "voting" {
-		return fmt.Errorf("chat not allowed in current phase")
+	// Allow chat in all phases except storyteller submit.
+	if game.Phase == domain.PhaseStorytellerSubmit {
+		return fmt.Errorf("chat not allowed during storyteller phase")
 	}
 
 	// Create chat message
@@ -1175,16 +1309,13 @@ func (m *Manager) GetChatHistory(roomCode string, phase string, limit int) ([]Ch
 
 // SendSystemMessage sends a system message (e.g., "Player joined", "Round started")
 func (m *Manager) SendSystemMessage(roomCode string, message string) error {
-	game := m.getGame(roomCode)
-	if game == nil {
-		return fmt.Errorf("game not found")
+	game, _, err := m.loadSnapshot(roomCode)
+	if err != nil {
+		return err
 	}
 
 	// Determine current phase
-	currentPhase := "lobby"
-	if game.Status == domain.GameStatusInProgress && game.CurrentRound != nil {
-		currentPhase = string(game.CurrentRound.Status)
-	}
+	currentPhase := strings.ToLower(string(game.Phase))
 
 	// Create system message with a system player ID (using nil UUID)
 	systemPlayerID := uuid.Nil
@@ -1222,136 +1353,38 @@ func (m *Manager) SendSystemMessage(roomCode string, message string) error {
 	return nil
 }
 
-// startCleanupService runs a background goroutine to clean up inactive games
-func (m *Manager) startCleanupService() {
-	ticker := time.NewTicker(m.cleanupInterval)
-	defer ticker.Stop()
-
-	logger.Info("Game cleanup service started",
-		"check_interval", m.cleanupInterval,
-		"empty_room_timeout", "10m",
-		"occupied_room_timeout", "30m")
-
-	for {
-		select {
-		case <-ticker.C:
-			m.cleanupInactiveGames()
-		case <-m.stopCleanup:
-			logger.Info("Game cleanup service stopped")
-			return
-		}
-	}
-}
-
-// cleanupInactiveGames removes games that have been inactive for too long
-func (m *Manager) cleanupInactiveGames() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	var toRemove []string
-	var emptyRooms []string
-	var occupiedRooms []string
-
-	for roomCode, game := range m.games {
-		game.mu.Lock()
-
-		// Count active/connected players and prune expired disconnects.
-		activePlayerCount := 0
-		removedDisconnected := false
-		for playerID, player := range game.Players {
-			if player.IsConnected {
-				activePlayerCount++
-				continue
-			}
-
-			if m.disconnectedPlayerTTL > 0 && player.DisconnectedAt != nil {
-				if time.Since(*player.DisconnectedAt) > m.disconnectedPlayerTTL {
-					delete(game.Players, playerID)
-					removedDisconnected = true
-				}
-			}
-		}
-
-		emptyRoomTimeout := 10 * time.Minute    // Empty rooms: 10 minutes
-		occupiedRoomTimeout := 30 * time.Minute // Rooms with players: 30 minutes
-
-		var shouldRemove bool
-		var reason string
-
-		if activePlayerCount == 0 {
-			// Empty room - use shorter timeout
-			shouldRemove = time.Since(game.LastActivity) > emptyRoomTimeout
-			if shouldRemove {
-				emptyRooms = append(emptyRooms, roomCode)
-				reason = "Game closed - empty room (10 minutes)"
-			}
-		} else {
-			// Room has players - use longer timeout
-			shouldRemove = time.Since(game.LastActivity) > occupiedRoomTimeout
-			if shouldRemove {
-				occupiedRooms = append(occupiedRooms, roomCode)
-				reason = "Game closed due to inactivity (30 minutes)"
-			}
-		}
-
-		if shouldRemove {
-			toRemove = append(toRemove, roomCode)
-			// Store reason for later use
-			game.mu.Unlock()
-
-			// Notify all connected players that the game is being closed
-			m.broadcastGameClosure(game, reason)
-
-			// Mark game as abandoned in database
-			// m.markGameAsAbandoned(game) -> Moved to repo
-			if err := m.repo.UpdateGameStatus(game.ID, domain.GameStatusAbandoned); err != nil {
-				logger.Error("Failed to mark game as abandoned", "error", err, "room_code", game.RoomCode)
-			}
-		} else {
-			game.mu.Unlock()
-		}
-
-		if removedDisconnected && m.cache != nil {
-			if err := m.cache.SetGame(context.Background(), game); err != nil {
-				logger.Error("Failed to update game cache after pruning disconnects", "error", err, "room_code", roomCode)
-			}
-		}
-	}
-
-	if len(toRemove) > 0 {
-		logger.Info("Cleaning up inactive games",
-			"total_count", len(toRemove),
-			"empty_rooms", len(emptyRooms),
-			"occupied_rooms", len(occupiedRooms),
-			"empty_room_codes", emptyRooms,
-			"occupied_room_codes", occupiedRooms)
-
-		// Remove from memory
-		for _, roomCode := range toRemove {
-			delete(m.games, roomCode)
-		}
-	}
-}
-
-// broadcastGameClosure notifies all players that the game is being closed
-func (m *Manager) broadcastGameClosure(game *GameState, reason string) {
-	game.mu.RLock()
-	defer game.mu.RUnlock()
-
-	if m.broadcaster == nil {
+func (m *Manager) sendSystemMessageWithGame(game *GameState, message string) {
+	if game == nil {
 		return
 	}
-	m.broadcaster.Broadcast(game.RoomCode, GameMessage{
-		Type: MessageTypeError,
-		Payload: ErrorPayload{
-			Message: reason,
-		},
-	})
-}
 
-// StopCleanupService stops the background cleanup service
-func (m *Manager) StopCleanupService() {
-	if m.stopCleanup != nil {
-		close(m.stopCleanup)
+	currentPhase := strings.ToLower(string(game.Phase))
+
+	systemPlayerID := uuid.Nil
+	chatMessage := &ChatMessage{
+		ID:          uuid.New(),
+		GameID:      game.ID,
+		PlayerID:    systemPlayerID,
+		Message:     message,
+		MessageType: "system",
+		Phase:       currentPhase,
+		IsVisible:   true,
+		CreatedAt:   time.Now(),
 	}
+
+	if err := m.repo.SaveChatMessage(chatMessage); err != nil {
+		logger.Error("Failed to persist system message", "error", err)
+	}
+
+	payload := ChatMessagePayload{
+		ID:          chatMessage.ID,
+		PlayerID:    systemPlayerID,
+		PlayerName:  "System",
+		Message:     chatMessage.Message,
+		MessageType: chatMessage.MessageType,
+		Phase:       chatMessage.Phase,
+		Timestamp:   chatMessage.CreatedAt,
+	}
+
+	m.BroadcastToGame(game, MessageTypeChatMessage, payload)
 }

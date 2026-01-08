@@ -127,10 +127,7 @@ func GetGame(c *gin.Context) {
 		return
 	}
 
-	// Check if game is live (in memory)
-	manager := game.GetManager()
-	liveGame := manager.GetGame(req.RoomCode)
-	isLive := liveGame != nil
+	isLive := dbGame.Status == domain.GameStatusWaiting || dbGame.Status == domain.GameStatusInProgress
 
 	c.JSON(http.StatusOK, GetGameResponse{
 		Game:   &dbGame,
@@ -292,8 +289,16 @@ func HealthCheck(c *gin.Context) {
 	}
 
 	// Check active games
-	manager := game.GetManager()
-	activeGamesCount := manager.GetActiveGamesCount()
+	var activeGamesCount int64
+	if err := db.Model(&models.Game{}).
+		Where("status IN ?", []string{"waiting", "in_progress"}).
+		Count(&activeGamesCount).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status": "unhealthy",
+			"error":  "Failed to query active games",
+		})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":       "healthy",
@@ -693,7 +698,11 @@ func AddBotToGame(c *gin.Context) {
 	}
 
 	// Add bot to game
-	manager := game.GetManager()
+	manager, err := getManager()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	gameState, err := manager.AddBot(req.RoomCode, req.BotLevel)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -803,7 +812,11 @@ func GetChatHistory(c *gin.Context) {
 	phase := c.DefaultQuery("phase", "all")
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
 
-	manager := game.GetManager()
+	manager, err := getManager()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
 	messages, err := manager.GetChatHistory(roomCode, phase, limit)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})

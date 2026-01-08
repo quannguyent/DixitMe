@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
+	"github.com/redis/go-redis/v9"
 )
 
 var upgrader = websocket.Upgrader{
@@ -23,29 +25,104 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
+const (
+	redisChannelGameEvents = "dixitme:game:events"
+)
+
+// PubSubMessage represents a message sent over Redis for synchronization
+type PubSubMessage struct {
+	SourceID       string           `json:"source_id"`
+	RoomCode       string           `json:"room_code"`
+	TargetPlayerID *uuid.UUID       `json:"target_player_id,omitempty"` // nil means broadcast to all
+	Message        game.GameMessage `json:"message"`
+}
+
 // Hub manages WebSocket connections and implements game.Broadcaster.
 type Hub struct {
 	manager     *game.Manager
 	jwtService  *auth.JWTService
+	redisClient *redis.Client
+	instanceID  string
 	conns       map[string]map[uuid.UUID]*websocket.Conn // roomCode -> playerID -> conn
 	playerRooms map[uuid.UUID]string                     // playerID -> roomCode
 	mu          sync.RWMutex
 }
 
-func NewHub(jwtService *auth.JWTService) *Hub {
-	return &Hub{
+func NewHub(jwtService *auth.JWTService, redisClient *redis.Client) *Hub {
+	h := &Hub{
 		jwtService:  jwtService,
+		redisClient: redisClient,
+		instanceID:  uuid.New().String(),
 		conns:       make(map[string]map[uuid.UUID]*websocket.Conn),
 		playerRooms: make(map[uuid.UUID]string),
 	}
+
+	// Start listening for Redis messages
+	go h.subscribeToRedis()
+
+	return h
 }
 
 func (h *Hub) SetManager(m *game.Manager) {
 	h.manager = m
 }
 
+// subscribeToRedis listens for messages from Redis and broadcasts them locally
+func (h *Hub) subscribeToRedis() {
+	if h.redisClient == nil {
+		return
+	}
+
+	pubsub := h.redisClient.Subscribe(context.Background(), redisChannelGameEvents)
+	defer pubsub.Close()
+
+	ch := pubsub.Channel()
+	for msg := range ch {
+		var pubSubMsg PubSubMessage
+		if err := json.Unmarshal([]byte(msg.Payload), &pubSubMsg); err != nil {
+			logger.Error("Failed to unmarshal Redis message", "error", err)
+			continue
+		}
+
+		// Skip messages from self
+		if pubSubMsg.SourceID == h.instanceID {
+			continue
+		}
+
+		if pubSubMsg.TargetPlayerID != nil {
+			h.sendToPlayerLocal(pubSubMsg.RoomCode, *pubSubMsg.TargetPlayerID, pubSubMsg.Message)
+		} else {
+			h.broadcastLocal(pubSubMsg.RoomCode, pubSubMsg.Message)
+		}
+	}
+}
+
 // Broadcast implements game.Broadcaster.
+// It publishes the message to Redis to be picked up by all instances (including self via broadcastLocal if we didn't skip self, but here we publish and also broadcast locally for efficiency or let Redis handle it. To keep it simple and consistent, we can publish and let the subscription handle it, OR publish and broadcast locally and skip self in subscription.
+// Standard pattern: Publish to Redis. Redis subscription handles dispatch.
+// Optimization: Publish to Redis (for others) AND broadcast locally (for self), then skip self in subscription.
 func (h *Hub) Broadcast(roomCode string, msg game.GameMessage) {
+	// 1. Broadcast locally immediately
+	h.broadcastLocal(roomCode, msg)
+
+	// 2. Publish to Redis for other instances
+	if h.redisClient != nil {
+		pubSubMsg := PubSubMessage{
+			SourceID: h.instanceID,
+			RoomCode: roomCode,
+			Message:  msg,
+		}
+		payload, err := json.Marshal(pubSubMsg)
+		if err == nil {
+			h.redisClient.Publish(context.Background(), redisChannelGameEvents, payload)
+		} else {
+			logger.Error("Failed to marshal PubSub message", "error", err)
+		}
+	}
+}
+
+// broadcastLocal sends a message to all local connections in a room
+func (h *Hub) broadcastLocal(roomCode string, msg game.GameMessage) {
 	h.mu.RLock()
 	conns := h.conns[roomCode]
 	h.mu.RUnlock()
@@ -72,15 +149,50 @@ func (h *Hub) Broadcast(roomCode string, msg game.GameMessage) {
 
 // SendToPlayer implements game.Broadcaster.
 func (h *Hub) SendToPlayer(roomCode string, playerID uuid.UUID, msg game.GameMessage) {
+	// 1. Send locally if connected
+	h.sendToPlayerLocal(roomCode, playerID, msg)
+
+	// 2. Publish to Redis for other instances (in case player is connected elsewhere?
+	// Actually, a player is usually connected to one instance. But in a reconn scenario or if we don't know where they are...
+	// If we know they are local, we don't strictly need to publish, but for simplicity and to handle edge cases (e.g. multiple tabs?), we can publish.
+	// However, usually we can just check if local. If not found locally, publish?
+	// For full statelessness, we should publish if we don't find them, or just always publish.
+	// Let's always publish to be safe and consistent with the "stateless" goal,
+	// but we can optimization: check if local first.
+	// Since we did sendToPlayerLocal, if it succeeded, we might not need to publish?
+	// But `sendToPlayerLocal` doesn't return success/fail easily here without changing sig.
+	// Also, a user might have multiple connections (e.g. multiple tabs) potentially on different servers if sticky sessions aren't perfect?
+	// Let's stick to: Send Local + Publish (Skip Self).
+
+	if h.redisClient != nil {
+		pubSubMsg := PubSubMessage{
+			SourceID:       h.instanceID,
+			RoomCode:       roomCode,
+			TargetPlayerID: &playerID,
+			Message:        msg,
+		}
+		payload, err := json.Marshal(pubSubMsg)
+		if err == nil {
+			h.redisClient.Publish(context.Background(), redisChannelGameEvents, payload)
+		} else {
+			logger.Error("Failed to marshal PubSub message", "error", err)
+		}
+	}
+}
+
+// sendToPlayerLocal sends a message to a specific local connection
+func (h *Hub) sendToPlayerLocal(roomCode string, playerID uuid.UUID, msg game.GameMessage) {
 	h.mu.RLock()
-	conn := h.conns[roomCode][playerID]
+	// Check if the room exists
+	if roomConns, ok := h.conns[roomCode]; ok {
+		// Check if the player is in the room
+		if conn, ok := roomConns[playerID]; ok && conn != nil {
+			if err := conn.WriteJSON(msg); err != nil {
+				logger.Error("Failed to send WS message to player", "error", err, "room_code", roomCode, "player_id", playerID)
+			}
+		}
+	}
 	h.mu.RUnlock()
-	if conn == nil {
-		return
-	}
-	if err := conn.WriteJSON(msg); err != nil {
-		logger.Error("Failed to send WS message to player", "error", err, "room_code", roomCode, "player_id", playerID)
-	}
 }
 
 // HandleWebSocket handles WebSocket connections without auth.

@@ -16,6 +16,9 @@ type GameState struct {
 	Players      map[uuid.UUID]*Player `json:"players"`
 	CurrentRound *Round                `json:"current_round"`
 	Status       domain.GameStatus     `json:"status"`
+	Phase        domain.GamePhase      `json:"phase"`
+	Abandoned    bool                  `json:"abandoned"`
+	Version      int                   `json:"version"`
 	RoundNumber  int                   `json:"round_number"`
 	MaxRounds    int                   `json:"max_rounds"`
 	Deck         []int                 `json:"deck"`       // Remaining cards in deck

@@ -3,22 +3,18 @@ package game
 import (
 	"context"
 
-	"dixitme/internal/game/domain"
-
 	"github.com/google/uuid"
 )
 
 // GameRepository defines the interface for game persistence
 type GameRepository interface {
 	CreateGame(game *GameState) error
-	GetGame(roomCode string) (*GameState, error)
-	UpdateGameStatus(gameID uuid.UUID, status domain.GameStatus) error
+	LoadGameSnapshot(roomCode string) (*GameState, int, error)
+	TrySaveGameSnapshot(game *GameState, version int) (bool, error)
 	AddPlayerToGame(gameID uuid.UUID, player *Player) error
 	SaveRound(gameID uuid.UUID, round *Round) error
 	UpdateRound(round *Round) error
-	SaveCardSubmission(roundID, playerID uuid.UUID, cardID int) error
-	SaveVote(roundID, playerID uuid.UUID, cardID int) error
-	SaveGameCompletion(gameID, winnerID uuid.UUID) error
+	SaveGameCompletion(gameID, winnerID uuid.UUID, finalScores map[uuid.UUID]int, usedCards []int) error
 	SaveChatMessage(message *ChatMessage) error
 }
 

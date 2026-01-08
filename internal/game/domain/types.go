@@ -29,6 +29,19 @@ const (
 	GameStatusAbandoned  GameStatus = "abandoned"
 )
 
+// GamePhase represents the explicit finite state machine phase of a game.
+type GamePhase string
+
+const (
+	PhaseLobby             GamePhase = "LOBBY"
+	PhaseStorytellerSubmit GamePhase = "STORYTELLER_SUBMIT"
+	PhaseOthersSubmit      GamePhase = "OTHERS_SUBMIT"
+	PhaseVoting            GamePhase = "VOTING"
+	PhaseRevealScore       GamePhase = "REVEAL_SCORE"
+	PhaseRoundEnd          GamePhase = "ROUND_END"
+	PhaseGameOver          GamePhase = "GAME_OVER"
+)
+
 // RoundStatus represents the current phase of a round
 type RoundStatus string
 
@@ -54,12 +67,12 @@ type Card struct {
 
 // Tag represents a categorization tag (Domain)
 type Tag struct {
-	ID          int     `json:"id"`
-	Name        string  `json:"name"`
-	Slug        string  `json:"slug"`
-	Category    string  `json:"category"`
-	Color       string  `json:"color"`
-	Weight      float64 `json:"weight"`
+	ID       int     `json:"id"`
+	Name     string  `json:"name"`
+	Slug     string  `json:"slug"`
+	Category string  `json:"category"`
+	Color    string  `json:"color"`
+	Weight   float64 `json:"weight"`
 }
 
 // CardTag represents the relationship between cards and tags (Domain)

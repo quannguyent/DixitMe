@@ -47,6 +47,7 @@ export interface GameState {
   room_code: string;
   players: Record<string, Player>;
   current_round?: Round;
+  phase: 'LOBBY' | 'STORYTELLER_SUBMIT' | 'OTHERS_SUBMIT' | 'VOTING' | 'REVEAL_SCORE' | 'ROUND_END' | 'GAME_OVER';
   status: 'waiting' | 'in_progress' | 'completed' | 'abandoned';
   round_number: number;
   max_rounds: number;
