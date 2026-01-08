@@ -118,11 +118,17 @@ export const GameBoard: React.FC = () => {
     );
   }
 
+  const players = Object.values(gameState.players);
+  const onlineCount = players.filter((player) => player.is_connected).length;
+  const phaseTag = gameState.phase.replace(/_/g, ' ');
+  const isStoryteller = !!gameState.current_round && currentPlayer.id === gameState.current_round.storyteller_id;
+
   return (
     <div className="game-board">
       <div className="game-header">
         <div className="game-info">
-          <h1>Room: {gameState.room_code}</h1>
+          <div className="room-pill">Room {gameState.room_code}</div>
+          <h1>Dixit Table</h1>
           <div className="connection-status">
             <span className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
               {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
@@ -137,6 +143,7 @@ export const GameBoard: React.FC = () => {
               Storyteller: <strong>{getStorytellerName()}</strong>
             </div>
           )}
+          <div className="role-badge">{isStoryteller ? 'You are the storyteller' : 'You are a player'}</div>
         </div>
 
         <button onClick={handleLeaveGame} className="leave-btn">
@@ -146,6 +153,9 @@ export const GameBoard: React.FC = () => {
 
       <div className="phase-indicator">
         <h2>{getGamePhase()}</h2>
+        <div className="phase-meta">
+          <span className="phase-pill">{phaseTag}</span>
+        </div>
         {gameState.current_round?.clue && (
           <div className="clue-display">
             <strong>Clue:</strong> "{gameState.current_round.clue}"
@@ -154,8 +164,12 @@ export const GameBoard: React.FC = () => {
       </div>
 
       <div className="players-section">
+        <div className="players-header">
+          <h3>Players</h3>
+          <div className="players-count">{onlineCount} online</div>
+        </div>
         <div className="players-grid">
-          {Object.values(gameState.players).map((player) => (
+          {players.map((player) => (
             <div
               key={player.id}
               className={`player-card ${player.id === currentPlayer.id ? 'current-player' : ''} ${
@@ -230,7 +244,10 @@ export const GameBoard: React.FC = () => {
             <div className="chat-empty">No messages yet.</div>
           )}
           {chatMessages.map((msg) => (
-            <div key={msg.id} className="chat-message">
+            <div
+              key={msg.id}
+              className={`chat-message ${msg.player_name === 'System' ? 'system' : ''}`}
+            >
               <span className="chat-name">{msg.player_name}:</span>
               <span className="chat-text">{msg.message}</span>
             </div>

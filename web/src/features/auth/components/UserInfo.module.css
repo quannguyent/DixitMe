@@ -2,12 +2,12 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: white;
+  background: var(--panel-strong);
   padding: 1rem 1.5rem;
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
   margin-bottom: 1.5rem;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--panel-border);
   min-height: 60px;
 }
 
@@ -19,8 +19,9 @@
 
 .userName {
   font-weight: 600;
-  color: #1f2937;
+  color: var(--ink);
   font-size: 1.1rem;
+  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
 }
 
 .authType {
@@ -33,28 +34,28 @@
 }
 
 .authType.google {
-  background: #fef3c7;
-  color: #d97706;
+  background: rgba(209, 174, 79, 0.18);
+  color: var(--accent);
 }
 
 .authType.account {
-  background: #dbeafe;
-  color: #2563eb;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
 }
 
 .authType.guest {
-  background: #f3f4f6;
-  color: #6b7280;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink-muted);
 }
 
 .authType.default {
-  background: #f9fafb;
-  color: #374151;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
 }
 
 .userEmail {
   font-size: 0.85rem;
-  color: #6b7280;
+  color: var(--ink-muted);
 }
 
 .userActions {
@@ -64,8 +65,8 @@
 }
 
 .upgradeBtn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: var(--accent);
+  color: #14110e;
   border: none;
   padding: 0.5rem 1rem;
   border-radius: 8px;
@@ -77,13 +78,13 @@
 
 .upgradeBtn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
 }
 
 .logoutBtn {
-  background: #f3f4f6;
-  color: #6b7280;
-  border: 1px solid #d1d5db;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink-muted);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   padding: 0.5rem 1rem;
   border-radius: 8px;
   font-size: 0.9rem;
@@ -93,15 +94,15 @@
 }
 
 .logoutBtn:hover {
-  background: #e5e7eb;
-  color: #374151;
-  border-color: #9ca3af;
+  background: rgba(255, 255, 255, 0.16);
+  color: var(--ink);
+  border-color: rgba(255, 255, 255, 0.28);
 }
 
 .cancelBtn {
-  background: #f3f4f6;
-  color: #6b7280;
-  border: 1px solid #d1d5db;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink-muted);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   padding: 0.5rem 1rem;
   border-radius: 8px;
   font-size: 0.9rem;
@@ -111,8 +112,8 @@
 }
 
 .cancelBtn:hover {
-  background: #e5e7eb;
-  color: #374151;
+  background: rgba(255, 255, 255, 0.16);
+  color: var(--ink);
 }
 
 /* Upgrade form styles */
@@ -131,13 +132,13 @@
 
 .upgradeHeader h4 {
   margin: 0 0 0.5rem 0;
-  color: #1f2937;
+  color: var(--ink);
   font-size: 1.1rem;
 }
 
 .upgradeHeader p {
   margin: 0;
-  color: #6b7280;
+  color: var(--ink-muted);
   font-size: 0.9rem;
 }
 
@@ -148,16 +149,18 @@
 
 .formGroup input {
   padding: 0.75rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 8px;
   font-size: 0.9rem;
   transition: border-color 0.2s;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
 }
 
 .formGroup input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(209, 174, 79, 0.2);
 }
 
 .upgradeActions {

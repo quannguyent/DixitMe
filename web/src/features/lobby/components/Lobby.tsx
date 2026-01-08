@@ -3,6 +3,7 @@ import { useGameStore } from '../../game/stores/gameStore';
 import { useAuthStore } from '../../auth/stores/authStore';
 import { UserInfo } from '../../auth';
 import styles from './Lobby.module.css';
+import homeStyles from '../../../pages/HomePage.module.css';
 
 export const Lobby: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'join' | 'create'>('join');
@@ -12,7 +13,7 @@ export const Lobby: React.FC = () => {
   const autoJoinAttemptedRef = useRef(false);
   const [isAutoJoining, setIsAutoJoining] = useState(false);
 
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
 
   const {
     gameState,
@@ -134,6 +135,12 @@ export const Lobby: React.FC = () => {
     setChatText('');
   };
 
+  const handleLogout = async () => {
+    if (window.confirm('Are you sure you want to logout?')) {
+      await logout();
+    }
+  };
+
   const generateRoomCode = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let result = '';
@@ -148,126 +155,150 @@ export const Lobby: React.FC = () => {
 
   if (gameState) {
     return (
-      <div className="lobby-container">
-        <div className="game-lobby">
-          <UserInfo />
-          <div className="lobby-header">
-            <h2>Game Lobby</h2>
-            <div className="room-code">Room Code: <strong>{gameState.room_code}</strong></div>
-            <div className="connection-status">
-              <span className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
-                {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
-              </span>
-              {isAutoJoining && (
-                <span className={styles.statusText}>Rejoining room...</span>
-              )}
-            </div>
-            <button
-              onClick={handleLeaveLobby}
-              className={styles.leaveBtn}
-              disabled={isLoading}
-            >
-              Leave Lobby
-            </button>
+      <div className={homeStyles.container}>
+        <div className={homeStyles.header}>
+          <div className={homeStyles.logo}>
+            <h1>DixitMe</h1>
+            <p>Online Dixit Card Game</p>
           </div>
 
-          <div className="players-section">
-            <h3>Players ({Object.keys(gameState.players).length}/6)</h3>
-            <div className="players-list">
-              {Object.values(gameState.players).map((player) => (
-                <div key={player.id} className="player-item">
-                  <span className="player-name">{player.name}</span>
-                  <span className={`player-status ${player.is_connected ? 'online' : 'offline'}`}>
-                    {player.is_connected ? '🟢' : '🔴'}
+          <div className={homeStyles.userSection}>
+            {user ? (
+              <div className={homeStyles.userInfo}>
+                <div className={homeStyles.userDetails}>
+                  <span className={homeStyles.userName}>{user.name}</span>
+                  <span className={homeStyles.userType}>
+                    {user.auth_type === 'guest' ? '👤 Guest' : '🔐 Member'}
                   </span>
                 </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="chat-panel">
-            <div className="chat-header">Chat</div>
-            <div className="chat-messages">
-              {chatMessages.length === 0 && (
-                <div className="chat-empty">No messages yet.</div>
-              )}
-              {chatMessages.map((msg) => (
-                <div key={msg.id} className="chat-message">
-                  <span className="chat-name">{msg.player_name}:</span>
-                  <span className="chat-text">{msg.message}</span>
+                <div className={homeStyles.userActions}>
+                  <button className={homeStyles.historyBtn} title="View game history">
+                    📊 History
+                  </button>
+                  <button onClick={handleLogout} className={homeStyles.logoutBtn}>
+                    ↗️ Logout
+                  </button>
                 </div>
-              ))}
-            </div>
-            <div className="chat-input">
-              <input
-                type="text"
-                value={chatText}
-                onChange={(e) => setChatText(e.target.value)}
-                placeholder="Type a message..."
-                maxLength={200}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    handleSendChat();
-                  }
-                }}
-              />
-              <button onClick={handleSendChat} disabled={!chatText.trim()}>
-                Send
+              </div>
+            ) : (
+              <div className={homeStyles.userInfo}>
+                <div className={homeStyles.userDetails}>
+                  <span className={homeStyles.userName}>Guest</span>
+                  <span className={homeStyles.userType}>👤 Guest</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className={styles.lobbyMain}>
+          <div className={styles.gameLobby}>
+            <div className={styles.roomBar}>
+              <div className={styles.roomCode}>Room Code: <strong>{gameState.room_code}</strong></div>
+              <button
+                onClick={handleLeaveLobby}
+                className={styles.leaveBtn}
+                disabled={isLoading}
+              >
+                Leave Lobby
               </button>
             </div>
-          </div>
 
-          <div className="game-info">
-            <p>Game Status: <strong>{gameState.status}</strong></p>
-            {gameState.status === 'waiting' && (
-              <p>Waiting for players to join... (Minimum 3 players required)</p>
-            )}
-          </div>
-
-          <div className="lobby-actions">
-            {gameState.status === 'waiting' && (
-              <>
-                {Object.keys(gameState.players).length < 6 && (
-                  <button
-                    onClick={handleAddBot}
-                    className={styles.addBotBtn}
-                    disabled={isLoading}
-                  >
-                    {isLoading ? 'Adding...' : 'Add Bot'}
-                  </button>
-                )}
-                {Object.keys(gameState.players).length >= 3 && (
-                  <button
-                    onClick={handleStartGame}
-                    className={styles.startGameBtn}
-                    disabled={isLoading}
-                  >
-                    {isLoading ? 'Starting...' : 'Start Game'}
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-
-          {error && (
-            <div className="error-message">
-              {error}
+            <div className={styles.playersSection}>
+              <h3>Players ({Object.keys(gameState.players).length}/6)</h3>
+              <div className={styles.playersList}>
+                {Object.values(gameState.players).map((player) => (
+                  <div key={player.id} className={styles.playerItem}>
+                    <span className={styles.playerName}>{player.name}</span>
+                    <span className={styles.playerStatus}>
+                      {player.is_connected ? '🟢' : '🔴'}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-          )}
+
+            <div className={styles.chatPanel}>
+              <div className={styles.chatHeader}>Chat</div>
+              <div className={styles.chatMessages}>
+                {chatMessages.length === 0 && (
+                  <div className={styles.chatEmpty}>No messages yet.</div>
+                )}
+                {chatMessages.map((msg) => (
+                  <div key={msg.id} className={styles.chatMessage}>
+                    <span className={styles.chatName}>{msg.player_name}:</span>
+                    <span className={styles.chatText}>{msg.message}</span>
+                  </div>
+                ))}
+              </div>
+              <div className={styles.chatInput}>
+                <input
+                  type="text"
+                  value={chatText}
+                  onChange={(e) => setChatText(e.target.value)}
+                  placeholder="Type a message..."
+                  maxLength={200}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSendChat();
+                    }
+                  }}
+                />
+                <button onClick={handleSendChat} disabled={!chatText.trim()}>
+                  Send
+                </button>
+              </div>
+            </div>
+
+            <div className={styles.lobbyActions}>
+              {gameState.status === 'waiting' && (
+                <>
+                  {Object.keys(gameState.players).length < 6 && (
+                    <button
+                      onClick={handleAddBot}
+                      className={styles.addBotBtn}
+                      disabled={isLoading}
+                    >
+                      {isLoading ? 'Adding...' : 'Add Bot'}
+                    </button>
+                  )}
+                  {Object.keys(gameState.players).length >= 3 && (
+                    <button
+                      onClick={handleStartGame}
+                      className={styles.startGameBtn}
+                      disabled={isLoading}
+                    >
+                      {isLoading ? 'Starting...' : 'Start Game'}
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+
+            {error && (
+              <div className={styles.errorMessage}>
+                {error}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="lobby-container">
-      <div className="lobby-form">
+    <div className={styles.lobbyContainer}>
+      <div className={styles.lobbyForm}>
         <UserInfo />
-        <div className="form-header">
+        <div className={styles.formHeader}>
           <h1>DixitMe</h1>
           <p>Online Dixit Card Game</p>
-          <div className="connection-status">
-            <span className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
+          <div className={styles.connectionStatus}>
+            <span
+              className={`${styles.statusIndicator} ${
+                isConnected ? styles.connected : styles.disconnected
+              }`}
+            >
               {isConnected ? '🟢 Connected' : '🔴 Connecting...'}
             </span>
             {isAutoJoining && (
@@ -276,15 +307,15 @@ export const Lobby: React.FC = () => {
           </div>
         </div>
 
-        <div className="tabs">
+        <div className={styles.tabs}>
           <button
-            className={`tab ${activeTab === 'join' ? 'active' : ''}`}
+            className={`${styles.tab} ${activeTab === 'join' ? styles.active : ''}`}
             onClick={() => setActiveTab('join')}
           >
             Join Game
           </button>
           <button
-            className={`tab ${activeTab === 'create' ? 'active' : ''}`}
+            className={`${styles.tab} ${activeTab === 'create' ? styles.active : ''}`}
             onClick={() => setActiveTab('create')}
           >
             Create Game
@@ -292,8 +323,8 @@ export const Lobby: React.FC = () => {
         </div>
 
         {activeTab === 'join' && (
-          <form onSubmit={handleJoinGame} className="game-form">
-            <div className="form-group">
+          <form onSubmit={handleJoinGame} className={styles.gameForm}>
+            <div className={styles.formGroup}>
               <label htmlFor="join-name">Your Name</label>
               <input
                 id="join-name"
@@ -305,7 +336,7 @@ export const Lobby: React.FC = () => {
                 required
               />
             </div>
-            <div className="form-group">
+            <div className={styles.formGroup}>
               <label htmlFor="join-room">Room Code</label>
               <input
                 id="join-room"
@@ -320,7 +351,7 @@ export const Lobby: React.FC = () => {
             </div>
             <button
               type="submit"
-              className="submit-btn"
+              className={styles.submitBtn}
               disabled={isLoading || !isConnected}
             >
               {isLoading ? 'Joining...' : 'Join Game'}
@@ -329,8 +360,8 @@ export const Lobby: React.FC = () => {
         )}
 
         {activeTab === 'create' && (
-          <form onSubmit={handleCreateGame} className="game-form">
-            <div className="form-group">
+          <form onSubmit={handleCreateGame} className={styles.gameForm}>
+            <div className={styles.formGroup}>
               <label htmlFor="create-name">Your Name</label>
               <input
                 id="create-name"
@@ -342,9 +373,9 @@ export const Lobby: React.FC = () => {
                 required
               />
             </div>
-            <div className="form-group">
+            <div className={styles.formGroup}>
               <label htmlFor="create-room">Room Code</label>
-              <div className="room-code-input">
+              <div className={styles.roomCodeInput}>
                 <input
                   id="create-room"
                   type="text"
@@ -358,7 +389,7 @@ export const Lobby: React.FC = () => {
                 <button
                   type="button"
                   onClick={generateRoomCode}
-                  className="generate-btn"
+                  className={styles.generateBtn}
                 >
                   Generate
                 </button>
@@ -366,7 +397,7 @@ export const Lobby: React.FC = () => {
             </div>
             <button
               type="submit"
-              className="submit-btn"
+              className={styles.submitBtn}
               disabled={isLoading || !isConnected}
             >
               {isLoading ? 'Creating...' : 'Create Game'}
@@ -375,7 +406,7 @@ export const Lobby: React.FC = () => {
         )}
 
         {error && (
-          <div className="error-message">
+          <div className={styles.errorMessage}>
             {error}
           </div>
         )}

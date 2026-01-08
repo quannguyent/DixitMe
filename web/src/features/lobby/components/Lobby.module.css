@@ -6,55 +6,79 @@
   padding: 20px;
 }
 
+.lobbyMain {
+  display: flex;
+  justify-content: center;
+  padding: 2rem 1.5rem 3rem;
+}
+
 .gameLobby {
-  background: white;
+  background: var(--panel-strong);
   border-radius: 12px;
   padding: 2rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--panel-border);
   min-width: 400px;
   max-width: 600px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem;
 }
 
-.lobbyHeader {
-  text-align: center;
-  margin-bottom: 2rem;
-}
-
-.lobbyHeader h2 {
-  margin: 0 0 1rem 0;
-  color: #333;
+.roomBar {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .roomCode {
   font-size: 1.2rem;
-  margin-bottom: 0.5rem;
+  margin-bottom: 0;
+  color: var(--ink);
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.16);
 }
 
 .connectionStatus {
   font-size: 0.9rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
-.statusIndicator.connected {
+.statusIndicator {
+  font-weight: 600;
+}
+
+.connected {
   color: #22c55e;
 }
 
-.statusIndicator.disconnected {
+.disconnected {
   color: #ef4444;
 }
 
 .statusText {
   display: block;
   margin-top: 4px;
-  color: #555;
+  color: var(--ink-muted);
   font-size: 0.85rem;
 }
 
 .leaveBtn {
-  margin-top: 0.75rem;
+  margin-top: 0;
   padding: 0.5rem 0.9rem;
   border: none;
   border-radius: 8px;
-  background: #ef4444;
+  background: rgba(239, 68, 68, 0.8);
   color: #fff;
   font-weight: 600;
   cursor: pointer;
@@ -66,12 +90,13 @@
 }
 
 .playersSection {
-  margin-bottom: 2rem;
+  margin-bottom: 0;
+  grid-column: 1 / 2;
 }
 
 .playersSection h3 {
   margin: 0 0 1rem 0;
-  color: #333;
+  color: var(--ink);
 }
 
 .playersList {
@@ -85,34 +110,29 @@
   justify-content: space-between;
   align-items: center;
   padding: 0.75rem;
-  background: #f8fafc;
+  background: rgba(255, 255, 255, 0.06);
   border-radius: 8px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .playerName {
   font-weight: 500;
 }
 
-.gameInfo {
-  margin-bottom: 2rem;
-  text-align: center;
-}
-
-.gameInfo p {
-  margin: 0.5rem 0;
-  color: #666;
+.playerStatus {
+  font-size: 1rem;
 }
 
 .lobbyActions {
   display: flex;
   justify-content: center;
   gap: 1rem;
+  grid-column: 1 / -1;
 }
 
 .startGameBtn {
-  background: #22c55e;
-  color: white;
+  background: var(--accent);
+  color: #14110e;
   border: none;
   padding: 0.75rem 2rem;
   border-radius: 8px;
@@ -123,17 +143,17 @@
 }
 
 .startGameBtn:hover:not(:disabled) {
-  background: #16a34a;
+  background: var(--accent-strong);
 }
 
 .startGameBtn:disabled {
-  background: #9ca3af;
+  background: rgba(255, 255, 255, 0.2);
   cursor: not-allowed;
 }
 
 .addBotBtn {
-  background: #3b82f6;
-  color: white;
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--ink);
   border: none;
   padding: 0.75rem 1.5rem;
   border-radius: 8px;
@@ -144,30 +164,110 @@
 }
 
 .addBotBtn:hover:not(:disabled) {
-  background: #2563eb;
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .addBotBtn:disabled {
-  background: #9ca3af;
+  background: rgba(255, 255, 255, 0.2);
   cursor: not-allowed;
 }
 
 .errorMessage {
-  background: #fef2f2;
-  color: #dc2626;
+  background: rgba(239, 68, 68, 0.16);
+  color: #f6d7d1;
   padding: 0.75rem;
   border-radius: 8px;
   margin-top: 1rem;
   text-align: center;
-  border: 1px solid #fecaca;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  grid-column: 1 / -1;
+}
+
+.chatPanel {
+  grid-column: 2 / 3;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.chatHeader {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.chatMessages {
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-right: 4px;
+}
+
+.chatEmpty {
+  color: var(--ink-muted);
+  font-size: 0.9rem;
+}
+
+.chatMessage {
+  color: var(--ink);
+  font-size: 0.95rem;
+  line-height: 1.4;
+}
+
+.chatName {
+  font-weight: 600;
+  margin-right: 0.4rem;
+}
+
+.chatText {
+  color: var(--ink);
+}
+
+.chatInput {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.chatInput input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+}
+
+.chatInput input::placeholder {
+  color: var(--ink-muted);
+}
+
+.chatInput button {
+  padding: 0.5rem 0.8rem;
+  border: none;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #14110e;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chatInput button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* Lobby form styles */
 .lobbyForm {
-  background: white;
+  background: var(--panel-strong);
   border-radius: 12px;
   padding: 2rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--panel-border);
   min-width: 400px;
   max-width: 500px;
 }
@@ -179,22 +279,20 @@
 
 .formHeader h1 {
   margin: 0 0 0.5rem 0;
-  color: #333;
+  color: var(--ink);
   font-size: 2.5rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+  text-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
 }
 
 .formHeader p {
   margin: 0 0 1rem 0;
-  color: #666;
+  color: var(--ink-muted);
   font-size: 1.1rem;
 }
 
 .tabs {
   display: flex;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   margin-bottom: 2rem;
 }
 
@@ -205,17 +303,17 @@
   border: none;
   cursor: pointer;
   font-size: 1rem;
-  color: #666;
+  color: var(--ink-muted);
   transition: all 0.2s;
 }
 
-.tab.active {
-  color: #667eea;
-  border-bottom: 2px solid #667eea;
+.active {
+  color: var(--accent);
+  border-bottom: 2px solid var(--accent);
 }
 
 .tab:hover {
-  color: #667eea;
+  color: var(--accent);
 }
 
 .gameForm {
@@ -232,21 +330,23 @@
 .formGroup label {
   margin-bottom: 0.5rem;
   font-weight: 500;
-  color: #333;
+  color: var(--ink);
 }
 
 .formGroup input {
   padding: 0.75rem;
-  border: 1px solid #d1d5db;
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 8px;
   font-size: 1rem;
   transition: border-color 0.2s;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
 }
 
 .formGroup input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(209, 174, 79, 0.2);
 }
 
 .roomCodeInput {
@@ -259,9 +359,9 @@
 }
 
 .generateBtn {
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #d1d5db;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--ink);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   padding: 0.75rem 1rem;
   border-radius: 8px;
   cursor: pointer;
@@ -269,12 +369,12 @@
 }
 
 .generateBtn:hover {
-  background: #e5e7eb;
+  background: rgba(255, 255, 255, 0.16);
 }
 
 .submitBtn {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  background: var(--accent);
+  color: #14110e;
   border: none;
   padding: 0.75rem;
   border-radius: 8px;
@@ -291,4 +391,19 @@
 .submitBtn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+@media (max-width: 900px) {
+  .gameLobby {
+    grid-template-columns: 1fr;
+  }
+
+  .chatPanel {
+    grid-column: 1 / -1;
+  }
+
+  .roomBar {
+    justify-content: center;
+    text-align: center;
+  }
 }
