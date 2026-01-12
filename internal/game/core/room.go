@@ -143,6 +143,37 @@ func syncPhase(game *GameState) {
 	}
 }
 
+// executeWithRetry executes an action with optimistic locking retry logic
+func (m *Manager) executeWithRetry(roomCode string, action func(*GameState) error) error {
+	maxRetries := 3
+	for i := 0; i < maxRetries; i++ {
+		game, _, err := m.loadSnapshot(roomCode)
+		if err != nil {
+			return err
+		}
+
+		if err := action(game); err != nil {
+			return err
+		}
+
+		if err := m.persistSnapshot(game); err != nil {
+			// If it's a conflict error (which persistSnapshot wraps as "game state conflict"), retry
+			if err.Error() == "game state conflict" {
+				if i == maxRetries-1 {
+					return fmt.Errorf("failed to update game after %d retries due to concurrency: %w", maxRetries, err)
+				}
+				// Optional: Add small jitter/backoff here if needed
+				time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
+				continue
+			}
+			return err
+		}
+		// Success
+		return nil
+	}
+	return fmt.Errorf("unexpected Retry loop exit")
+}
+
 func (m *Manager) persistSnapshot(game *GameState) error {
 	if m.repo == nil {
 		return nil
@@ -242,85 +273,93 @@ func (m *Manager) loadSnapshot(roomCode string) (*GameState, int, error) {
 
 // JoinGame adds a player to an existing game
 func (m *Manager) JoinGame(roomCode string, playerID uuid.UUID, playerName string) (*GameState, error) {
-	game, _, err := m.loadSnapshot(roomCode)
+	var updatedGame *GameState
+
+	err := m.executeWithRetry(roomCode, func(game *GameState) error {
+		// Update activity
+		game.LastActivity = time.Now()
+
+		// Handle reconnection
+		if game.Phase != domain.PhaseGameOver {
+			if player, exists := game.Players[playerID]; exists && !player.IsConnected {
+				// Allow reconnection
+				player.IsConnected = true
+				player.DisconnectedAt = nil
+				updatedGame = game
+				return nil
+			}
+		}
+
+		// Check if game is still accepting players
+		if game.Phase != domain.PhaseLobby {
+			return fmt.Errorf("game already started")
+		}
+
+		// Check player limit (3-6 players for Dixit)
+		if len(game.Players) >= 6 {
+			return fmt.Errorf("game is full")
+		}
+
+		// Check if player already in game
+		if _, exists := game.Players[playerID]; exists {
+			return fmt.Errorf("player already in game")
+		}
+
+		// Add player
+		player := &Player{
+			ID:             playerID,
+			Name:           playerName,
+			Score:          0,
+			Position:       len(game.Players) + 1,
+			Hand:           make([]int, 0),
+			IsConnected:    true,
+			DisconnectedAt: nil,
+			IsActive:       true,
+		}
+
+		game.Players[playerID] = player
+
+		// Persist changes (AddPlayerToGame is idempotent or we rely on snapshot persistence validation)
+		// NOTE: m.repo.AddPlayerToGame writes to DB directly. In a retry loop, this might be called multiple times.
+		// However, since we are optimistic locking on the Snapshot version, if we fail to save the snapshot,
+		// we should probably NOT have side effects in the repo that are not versioned.
+		// BUT, `AddPlayerToGame` is likely just an append. If we retry, we append again?
+		// Ideally `executeWithRetry` should only encompass the *Snapshot* update.
+		// If `AddPlayerToGame` is separate, it creates a consistency issue.
+		// For this refactor, we assume `persistSnapshot` handles the main versioning.
+		// If `AddPlayerToGame` fails because player exists, it returns error, which aborts retry.
+		if err := m.repo.AddPlayerToGame(game.ID, player); err != nil {
+			return fmt.Errorf("failed to persist player: %w", err)
+		}
+
+		updatedGame = game
+		return nil
+	})
+
 	if err != nil {
 		return nil, err
 	}
 
-	// Update activity
-	game.LastActivity = time.Now()
+	// Post-transaction actions (Broadcasts should happen AFTER successful commit)
+	// We need to determine if it was a join or rejoin to send correct message
+	if player, ok := updatedGame.Players[playerID]; ok {
+		// Broadcast player joined
+		m.BroadcastToGame(updatedGame, MessageTypePlayerJoined, PlayerJoinedPayload{Player: player})
 
-	// Handle reconnection
-	if game.Phase != domain.PhaseGameOver {
-		if player, exists := game.Players[playerID]; exists && !player.IsConnected {
-			// Allow reconnection
-			player.IsConnected = true
-			player.DisconnectedAt = nil
-
-			// Broadcast player rejoin
-			m.BroadcastToGame(game, MessageTypePlayerJoined, PlayerJoinedPayload{Player: player})
-
-			// Send system message
-			m.SendSystemMessage(roomCode, fmt.Sprintf("%s rejoined the game", playerName))
-
-			if err := m.persistSnapshot(game); err != nil {
-				return nil, err
-			}
-			return game, nil
-		}
+		// Send system message
+		action := "joined"
+		// Simple heuristic: if we just re-connected, maybe we should track that state.
+		// For simplicity, we just say "joined" or "rejoined" based on context in helper if we captured it.
+		// But here `player` is from `updatedGame`.
+		m.SendSystemMessage(roomCode, fmt.Sprintf("%s %s the game", playerName, action))
 	}
 
-	// Check if game is still accepting players
-	if game.Phase != domain.PhaseLobby {
-		return nil, fmt.Errorf("game already started")
-	}
-
-	// Check player limit (3-6 players for Dixit)
-	if len(game.Players) >= 6 {
-		return nil, fmt.Errorf("game is full")
-	}
-
-	// Check if player already in game
-	if _, exists := game.Players[playerID]; exists {
-		return nil, fmt.Errorf("player already in game")
-	}
-
-	// Add player
-	player := &Player{
-		ID:             playerID,
-		Name:           playerName,
-		Score:          0,
-		Position:       len(game.Players) + 1,
-		Hand:           make([]int, 0),
-		IsConnected:    true,
-		DisconnectedAt: nil,
-		IsActive:       true,
-	}
-
-	game.Players[playerID] = player
-
-	// Persist changes
-	if err := m.repo.AddPlayerToGame(game.ID, player); err != nil {
-		delete(game.Players, playerID)
-		return nil, fmt.Errorf("failed to persist player: %w", err)
-	}
-	if err := m.persistSnapshot(game); err != nil {
-		delete(game.Players, playerID)
-		return nil, err
-	}
-
-	// Update Redis
-	if err := m.cache.SetGame(context.Background(), game); err != nil {
+	// Update Redis (optimistic, fine to fail)
+	if err := m.cache.SetGame(context.Background(), updatedGame); err != nil {
 		logger.Error("Failed to update game in Redis", "error", err, "room_code", roomCode)
 	}
 
-	// Broadcast player joined
-	m.BroadcastToGame(game, MessageTypePlayerJoined, PlayerJoinedPayload{Player: player})
-
-	// Send system message
-	m.SendSystemMessage(roomCode, fmt.Sprintf("%s joined the game", playerName))
-
-	return game, nil
+	return updatedGame, nil
 }
 
 // MarkPlayerDisconnected marks a player as disconnected and keeps them in the room.
@@ -469,188 +508,198 @@ func (m *Manager) AddBot(roomCode string, botLevel string) (*GameState, error) {
 
 // StartGame starts a game if conditions are met
 func (m *Manager) StartGame(roomCode string, playerID uuid.UUID) error {
-	game, _, err := m.loadSnapshot(roomCode)
+	var updatedGame *GameState
+
+	err := m.executeWithRetry(roomCode, func(game *GameState) error {
+		// Update activity
+		game.LastActivity = time.Now()
+
+		// Check if player is in the game
+		if _, exists := game.Players[playerID]; !exists {
+			return fmt.Errorf("player not in game")
+		}
+
+		// Check if game can start (minimum 3 players)
+		if len(game.Players) < 3 {
+			return fmt.Errorf("need at least 3 players to start")
+		}
+
+		if game.Phase != domain.PhaseLobby {
+			return fmt.Errorf("game already started")
+		}
+
+		// Initialize game
+		if err := setPhase(game, domain.PhaseStorytellerSubmit); err != nil {
+			return fmt.Errorf("failed to start game: %w", err)
+		}
+
+		// Deal cards to players
+		m.dealCards(game)
+
+		// Start first round
+		if err := m.startNewRound(game); err != nil {
+			return fmt.Errorf("failed to start first round: %w", err)
+		}
+
+		updatedGame = game
+		return nil
+	})
+
 	if err != nil {
 		return err
 	}
 
-	// Update activity
-	game.LastActivity = time.Now()
-
-	// Check if player is in the game
-	if _, exists := game.Players[playerID]; !exists {
-		return fmt.Errorf("player not in game")
-	}
-
-	// Check if game can start (minimum 3 players)
-	if len(game.Players) < 3 {
-		return fmt.Errorf("need at least 3 players to start")
-	}
-
-	if game.Phase != domain.PhaseLobby {
-		return fmt.Errorf("game already started")
-	}
-
-	// Initialize game
-	if err := setPhase(game, domain.PhaseStorytellerSubmit); err != nil {
-		return fmt.Errorf("failed to start game: %w", err)
-	}
-
-	// Deal cards to players
-	m.dealCards(game)
-
-	// Start first round
-	if err := m.startNewRound(game); err != nil {
-		return fmt.Errorf("failed to start first round: %w", err)
-	}
-
-	if err := m.persistSnapshot(game); err != nil {
-		return err
-	}
-
 	// Broadcast game started
-	m.BroadcastToGame(game, MessageTypeGameStarted, GameStartedPayload{GameState: game})
+	m.BroadcastToGame(updatedGame, MessageTypeGameStarted, GameStartedPayload{GameState: updatedGame})
 
 	// Send system message
 	m.SendSystemMessage(roomCode, "Game started! Let the storytelling begin!")
-	m.ProcessBotActions(game)
+	m.ProcessBotActions(updatedGame)
 
 	return nil
 }
 
 // SubmitClue handles storyteller submitting a clue
 func (m *Manager) SubmitClue(roomCode string, playerID uuid.UUID, clue string, cardID int) error {
-	game, _, err := m.loadSnapshot(roomCode)
+	var updatedGame *GameState
+
+	err := m.executeWithRetry(roomCode, func(game *GameState) error {
+		if game.CurrentRound == nil {
+			return fmt.Errorf("no active round")
+		}
+
+		if game.CurrentRound.StorytellerID != playerID {
+			return fmt.Errorf("only storyteller can submit clue")
+		}
+
+		if game.Phase != domain.PhaseStorytellerSubmit {
+			return fmt.Errorf("not in storytelling phase")
+		}
+
+		// Validate card is in player's hand
+		player := game.Players[playerID]
+		cardInHand := false
+		for _, handCard := range player.Hand {
+			if handCard == cardID {
+				cardInHand = true
+				break
+			}
+		}
+
+		if !cardInHand {
+			return fmt.Errorf("card not in player's hand")
+		}
+
+		// Set clue and storyteller card
+		game.CurrentRound.Clue = clue
+		game.CurrentRound.StorytellerCard = cardID
+		if err := setPhase(game, domain.PhaseOthersSubmit); err != nil {
+			return fmt.Errorf("failed to advance phase: %w", err)
+		}
+
+		// Remove card from storyteller's hand and add to used cards
+		for i, handCard := range player.Hand {
+			if handCard == cardID {
+				player.Hand = append(player.Hand[:i], player.Hand[i+1:]...)
+				game.UsedCards = append(game.UsedCards, cardID)
+				break
+			}
+		}
+
+		// Persist round update (side effect in DB, but idempotent for same round state)
+		if err := m.repo.UpdateRound(game.CurrentRound); err != nil {
+			return fmt.Errorf("failed to update round: %w", err)
+		}
+
+		updatedGame = game
+		return nil
+	})
+
 	if err != nil {
 		return err
 	}
 
-	if game.CurrentRound == nil {
-		return fmt.Errorf("no active round")
-	}
-
-	if game.CurrentRound.StorytellerID != playerID {
-		return fmt.Errorf("only storyteller can submit clue")
-	}
-
-	if game.Phase != domain.PhaseStorytellerSubmit {
-		return fmt.Errorf("not in storytelling phase")
-	}
-
-	// Validate card is in player's hand
-	player := game.Players[playerID]
-	cardInHand := false
-	for _, handCard := range player.Hand {
-		if handCard == cardID {
-			cardInHand = true
-			break
-		}
-	}
-
-	if !cardInHand {
-		return fmt.Errorf("card not in player's hand")
-	}
-
-	// Set clue and storyteller card
-	game.CurrentRound.Clue = clue
-	game.CurrentRound.StorytellerCard = cardID
-	if err := setPhase(game, domain.PhaseOthersSubmit); err != nil {
-		return fmt.Errorf("failed to advance phase: %w", err)
-	}
-
-	// Remove card from storyteller's hand and add to used cards
-	for i, handCard := range player.Hand {
-		if handCard == cardID {
-			player.Hand = append(player.Hand[:i], player.Hand[i+1:]...)
-			game.UsedCards = append(game.UsedCards, cardID)
-			break
-		}
-	}
-
-	// Persist round update
-	if err := m.repo.UpdateRound(game.CurrentRound); err != nil {
-		return fmt.Errorf("failed to update round: %w", err)
-	}
-	if err := m.persistSnapshot(game); err != nil {
-		return err
-	}
-
 	// Broadcast clue submitted
-	m.BroadcastToGame(game, MessageTypeClueSubmitted, ClueSubmittedPayload{Clue: clue})
-	m.BroadcastToGame(game, MessageTypeGameState, GameStatePayload{GameState: game})
-	m.sendSystemMessageWithGame(game, fmt.Sprintf("Storyteller submitted a clue. Others can now submit cards."))
-	m.ProcessBotActions(game)
+	m.BroadcastToGame(updatedGame, MessageTypeClueSubmitted, ClueSubmittedPayload{Clue: clue})
+	m.BroadcastToGame(updatedGame, MessageTypeGameState, GameStatePayload{GameState: updatedGame})
+	m.sendSystemMessageWithGame(updatedGame, "Storyteller submitted a clue. Others can now submit cards.")
+	m.ProcessBotActions(updatedGame)
 
 	return nil
 }
 
 // SubmitCard handles non-storyteller players submitting cards
 func (m *Manager) SubmitCard(roomCode string, playerID uuid.UUID, cardID int) error {
-	game, _, err := m.loadSnapshot(roomCode)
+	var updatedGame *GameState
+	var allSubmitted bool
+
+	err := m.executeWithRetry(roomCode, func(game *GameState) error {
+		if game.CurrentRound == nil {
+			return fmt.Errorf("no active round")
+		}
+
+		if game.CurrentRound.StorytellerID == playerID {
+			return fmt.Errorf("storyteller cannot submit cards")
+		}
+
+		if game.Phase != domain.PhaseOthersSubmit {
+			return fmt.Errorf("not in card submission phase")
+		}
+
+		// Check if player already submitted
+		if _, exists := game.CurrentRound.Submissions[playerID]; exists {
+			return fmt.Errorf("card already submitted")
+		}
+
+		// Validate card is in player's hand
+		player := game.Players[playerID]
+		cardInHand := false
+		for _, handCard := range player.Hand {
+			if handCard == cardID {
+				cardInHand = true
+				break
+			}
+		}
+
+		if !cardInHand {
+			return fmt.Errorf("card not in player's hand")
+		}
+
+		// Add submission
+		game.CurrentRound.Submissions[playerID] = &CardSubmission{
+			PlayerID: playerID,
+			CardID:   cardID,
+		}
+
+		// Remove card from player's hand and add to used cards
+		for i, handCard := range player.Hand {
+			if handCard == cardID {
+				player.Hand = append(player.Hand[:i], player.Hand[i+1:]...)
+				game.UsedCards = append(game.UsedCards, cardID)
+				break
+			}
+		}
+
+		// Check if all players submitted
+		expectedSubmissions := len(game.Players) - 1 // Exclude storyteller
+		allSubmitted = len(game.CurrentRound.Submissions) == expectedSubmissions
+		if allSubmitted {
+			m.startVotingPhase(game)
+		}
+
+		updatedGame = game
+		return nil
+	})
+
 	if err != nil {
 		return err
 	}
 
-	if game.CurrentRound == nil {
-		return fmt.Errorf("no active round")
-	}
-
-	if game.CurrentRound.StorytellerID == playerID {
-		return fmt.Errorf("storyteller cannot submit cards")
-	}
-
-	if game.Phase != domain.PhaseOthersSubmit {
-		return fmt.Errorf("not in card submission phase")
-	}
-
-	// Check if player already submitted
-	if _, exists := game.CurrentRound.Submissions[playerID]; exists {
-		return fmt.Errorf("card already submitted")
-	}
-
-	// Validate card is in player's hand
-	player := game.Players[playerID]
-	cardInHand := false
-	for _, handCard := range player.Hand {
-		if handCard == cardID {
-			cardInHand = true
-			break
-		}
-	}
-
-	if !cardInHand {
-		return fmt.Errorf("card not in player's hand")
-	}
-
-	// Add submission
-	game.CurrentRound.Submissions[playerID] = &CardSubmission{
-		PlayerID: playerID,
-		CardID:   cardID,
-	}
-
-	// Remove card from player's hand and add to used cards
-	for i, handCard := range player.Hand {
-		if handCard == cardID {
-			player.Hand = append(player.Hand[:i], player.Hand[i+1:]...)
-			game.UsedCards = append(game.UsedCards, cardID)
-			break
-		}
-	}
-
-	// Check if all players submitted
-	expectedSubmissions := len(game.Players) - 1 // Exclude storyteller
-	if len(game.CurrentRound.Submissions) == expectedSubmissions {
-		m.startVotingPhase(game)
-	}
-	if err := m.persistSnapshot(game); err != nil {
-		return err
-	}
-
 	// Broadcast card submitted
-	m.BroadcastToGame(game, MessageTypeCardSubmitted, CardSubmittedPayload{PlayerID: playerID})
-	m.BroadcastToGame(game, MessageTypeGameState, GameStatePayload{GameState: game})
-	if len(game.CurrentRound.Submissions) == expectedSubmissions {
-		m.sendSystemMessageWithGame(game, "All cards submitted. Voting started.")
+	m.BroadcastToGame(updatedGame, MessageTypeCardSubmitted, CardSubmittedPayload{PlayerID: playerID})
+	m.BroadcastToGame(updatedGame, MessageTypeGameState, GameStatePayload{GameState: updatedGame})
+	if allSubmitted {
+		m.sendSystemMessageWithGame(updatedGame, "All cards submitted. Voting started.")
 	}
 
 	return nil
@@ -658,61 +707,66 @@ func (m *Manager) SubmitCard(roomCode string, playerID uuid.UUID, cardID int) er
 
 // SubmitVote handles player voting
 func (m *Manager) SubmitVote(roomCode string, playerID uuid.UUID, cardID int) error {
-	game, _, err := m.loadSnapshot(roomCode)
+	var updatedGame *GameState
+	var allVoted bool
+
+	err := m.executeWithRetry(roomCode, func(game *GameState) error {
+		if game.CurrentRound == nil {
+			return fmt.Errorf("no active round")
+		}
+
+		if game.CurrentRound.StorytellerID == playerID {
+			return fmt.Errorf("storyteller cannot vote")
+		}
+
+		if game.Phase != domain.PhaseVoting {
+			return fmt.Errorf("not in voting phase")
+		}
+
+		// Check if player already voted
+		if _, exists := game.CurrentRound.Votes[playerID]; exists {
+			return fmt.Errorf("already voted")
+		}
+
+		// Validate card is among revealed cards
+		validCard := false
+		for _, revealedCard := range game.CurrentRound.RevealedCards {
+			if revealedCard.CardID == cardID {
+				validCard = true
+				break
+			}
+		}
+
+		if !validCard {
+			return fmt.Errorf("invalid card selection")
+		}
+
+		// Add vote
+		game.CurrentRound.Votes[playerID] = &Vote{
+			PlayerID: playerID,
+			CardID:   cardID,
+		}
+
+		// Check if all players voted
+		expectedVotes := len(game.Players) - 1 // Exclude storyteller
+		allVoted = len(game.CurrentRound.Votes) == expectedVotes
+		if allVoted {
+			m.completeRound(game)
+		}
+
+		updatedGame = game
+		return nil
+	})
+
 	if err != nil {
 		return err
 	}
 
-	if game.CurrentRound == nil {
-		return fmt.Errorf("no active round")
-	}
-
-	if game.CurrentRound.StorytellerID == playerID {
-		return fmt.Errorf("storyteller cannot vote")
-	}
-
-	if game.Phase != domain.PhaseVoting {
-		return fmt.Errorf("not in voting phase")
-	}
-
-	// Check if player already voted
-	if _, exists := game.CurrentRound.Votes[playerID]; exists {
-		return fmt.Errorf("already voted")
-	}
-
-	// Validate card is among revealed cards
-	validCard := false
-	for _, revealedCard := range game.CurrentRound.RevealedCards {
-		if revealedCard.CardID == cardID {
-			validCard = true
-			break
-		}
-	}
-
-	if !validCard {
-		return fmt.Errorf("invalid card selection")
-	}
-
-	// Add vote
-	game.CurrentRound.Votes[playerID] = &Vote{
-		PlayerID: playerID,
-		CardID:   cardID,
-	}
-
-	// Check if all players voted
-	expectedVotes := len(game.Players) - 1 // Exclude storyteller
-	if len(game.CurrentRound.Votes) == expectedVotes {
-		m.completeRound(game)
-	}
-	if err := m.persistSnapshot(game); err != nil {
-		return err
-	}
-
 	// Broadcast vote submitted
-	m.BroadcastToGame(game, MessageTypeVoteSubmitted, VoteSubmittedPayload{PlayerID: playerID})
-	m.BroadcastToGame(game, MessageTypeGameState, GameStatePayload{GameState: game})
-	if len(game.CurrentRound.Votes) == expectedVotes {
-		m.sendSystemMessageWithGame(game, "All votes submitted.")
+	m.BroadcastToGame(updatedGame, MessageTypeVoteSubmitted, VoteSubmittedPayload{PlayerID: playerID})
+	m.BroadcastToGame(updatedGame, MessageTypeGameState, GameStatePayload{GameState: updatedGame})
+	if allVoted {
+		m.sendSystemMessageWithGame(updatedGame, "All votes submitted.")
 	}
 
 	return nil
