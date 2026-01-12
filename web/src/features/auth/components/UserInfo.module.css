@@ -1,184 +1,197 @@
+/* UserInfo.module.css */
 .userInfo {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: var(--panel-strong);
-  padding: 1rem 1.5rem;
-  border-radius: 12px;
-  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.4);
-  margin-bottom: 1.5rem;
-  border: 1px solid var(--panel-border);
-  min-height: 60px;
+  position: relative;
 }
 
 .userDetails {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  align-items: flex-end;
+  gap: 2px;
 }
 
 .userName {
-  font-weight: 600;
-  color: var(--ink);
-  font-size: 1.1rem;
-  text-shadow: 0 4px 12px rgba(0, 0, 0, 0.45);
-}
-
-.authType {
-  font-size: 0.85rem;
-  font-weight: 500;
-  padding: 0.25rem 0.5rem;
-  border-radius: 6px;
-  display: inline-block;
-  max-width: fit-content;
-}
-
-.authType.google {
-  background: rgba(209, 174, 79, 0.18);
-  color: var(--accent);
-}
-
-.authType.account {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--ink);
-}
-
-.authType.guest {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--ink-muted);
-}
-
-.authType.default {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--ink);
+  font-weight: 800;
+  font-size: 1rem;
+  color: white;
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
 }
 
 .userEmail {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--ink-muted);
+}
+
+.authType {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  display: inline-block;
+  margin-top: 2px;
+}
+
+.authType.guest {
+  color: var(--ink-muted);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.authType.account {
+  color: var(--accent-cyan);
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  background: rgba(34, 211, 238, 0.05);
+}
+
+.authType.google {
+  color: var(--accent-pink);
+  border: 1px solid rgba(244, 114, 182, 0.2);
+  background: rgba(244, 114, 182, 0.05);
 }
 
 .userActions {
   display: flex;
-  gap: 0.5rem;
   align-items: center;
+  gap: 0.75rem;
+  margin-left: 1rem;
+}
+
+.logoutBtn,
+.upgradeBtn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--glass-border);
+  color: var(--ink);
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.logoutBtn:hover {
+  background: rgba(248, 113, 113, 0.1);
+  color: var(--error);
+  border-color: rgba(248, 113, 113, 0.3);
 }
 
 .upgradeBtn {
-  background: var(--accent);
-  color: #14110e;
+  background: var(--accent-gold);
+  color: #3b0d0c;
   border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
+  font-weight: 800;
+  box-shadow: 0 2px 10px rgba(251, 191, 36, 0.2);
 }
 
 .upgradeBtn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 4px 15px rgba(251, 191, 36, 0.4);
 }
 
-.logoutBtn {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--ink-muted);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.logoutBtn:hover {
-  background: rgba(255, 255, 255, 0.16);
-  color: var(--ink);
-  border-color: rgba(255, 255, 255, 0.28);
-}
-
-.cancelBtn {
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--ink-muted);
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  padding: 0.5rem 1rem;
-  border-radius: 8px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.cancelBtn:hover {
-  background: rgba(255, 255, 255, 0.16);
-  color: var(--ink);
-}
-
-/* Upgrade form styles */
+/* Upgrade Form - Modal Style overrides */
 .upgradeForm {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  width: 100%;
-  align-items: stretch;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 1rem;
+  background: var(--glass-panel-strong);
+  backdrop-filter: blur(16px);
+  padding: 1.5rem;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--glass-border);
+  width: 320px;
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+  animation: slideIn 0.2s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .upgradeHeader {
-  text-align: center;
-  margin-bottom: 0.5rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--glass-border);
 }
 
 .upgradeHeader h4 {
-  margin: 0 0 0.5rem 0;
-  color: var(--ink);
+  margin: 0 0 0.25rem 0;
+  color: var(--accent-gold);
   font-size: 1.1rem;
 }
 
 .upgradeHeader p {
   margin: 0;
-  color: var(--ink-muted);
   font-size: 0.9rem;
+  color: var(--ink-muted);
+}
+
+.upgradeHeader strong {
+  color: white;
 }
 
 .formGroup {
-  display: flex;
-  flex-direction: column;
+  margin-bottom: 1rem;
 }
 
 .formGroup input {
+  width: 100%;
   padding: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 8px;
-  font-size: 0.9rem;
-  transition: border-color 0.2s;
-  background: rgba(255, 255, 255, 0.08);
-  color: var(--ink);
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  color: white;
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
 }
 
 .formGroup input:focus {
   outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(209, 174, 79, 0.2);
+  border-color: var(--accent-gold);
+  background: rgba(0, 0, 0, 0.5);
 }
 
 .upgradeActions {
   display: flex;
   gap: 0.5rem;
-  justify-content: center;
-  margin-top: 0.5rem;
+  margin-top: 1.25rem;
 }
 
-/* Responsive design */
-@media (max-width: 480px) {
+.upgradeActions button {
+  flex: 1;
+}
+
+.cancelBtn {
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  color: var(--ink-muted);
+  padding: 0.6rem;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s ease;
+}
+
+.cancelBtn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--ink);
+}
+
+@media (max-width: 768px) {
   .userInfo {
-    flex-direction: column;
-    gap: 1rem;
-    align-items: stretch;
-  }
-  
-  .logoutBtn {
-    text-align: center;
+    display: none;
+    /* Hide in header on mobile, handled by mobile menu if existing */
   }
 }

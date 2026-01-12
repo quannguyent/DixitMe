@@ -1,5 +1,6 @@
 import React from 'react';
 import { Card } from './Card';
+import styles from './PlayerHand.module.css';
 
 interface PlayerHandProps {
   cards: number[];
@@ -18,16 +19,13 @@ export const PlayerHand: React.FC<PlayerHandProps> = ({
   canSubmit,
   onSubmit,
 }) => {
+  const [isModalOpen, setIsModalOpen] = React.useState(false);
+  const [modalCardId, setModalCardId] = React.useState<number | null>(null);
+
   const handleCardClick = (cardId: number) => {
     if (!canSelect) return;
-
-    if (canSubmit && selectedCard === cardId) {
-      // Double-click to submit
-      onSubmit(cardId);
-    } else {
-      // Single-click to select
-      onCardSelect(cardId === selectedCard ? null : cardId);
-    }
+    setModalCardId(cardId);
+    setIsModalOpen(true);
   };
 
   const handleSubmit = () => {
@@ -36,13 +34,29 @@ export const PlayerHand: React.FC<PlayerHandProps> = ({
     }
   };
 
+  const handleModalConfirm = () => {
+    if (!modalCardId) return;
+    if (canSubmit) {
+      onSubmit(modalCardId);
+    } else {
+      onCardSelect(modalCardId);
+    }
+    setIsModalOpen(false);
+    setModalCardId(null);
+  };
+
+  const handleModalCancel = () => {
+    setIsModalOpen(false);
+    setModalCardId(null);
+  };
+
   if (cards.length === 0) {
     return (
-      <div className="player-hand">
-        <div className="hand-header">
+      <div className={styles.container}>
+        <div className={styles.header}>
           <h3>Your Hand</h3>
         </div>
-        <div className="empty-hand">
+        <div className={styles.emptyHand}>
           <p>No cards in hand</p>
         </div>
       </div>
@@ -50,28 +64,28 @@ export const PlayerHand: React.FC<PlayerHandProps> = ({
   }
 
   return (
-    <div className="player-hand">
-      <div className="hand-header">
+    <div className={styles.container}>
+      <div className={styles.header}>
         <h3>Your Hand ({cards.length} cards)</h3>
         {canSelect && (
-          <div className="hand-instructions">
+          <div className={styles.instructions}>
             {canSubmit ? (
               selectedCard ? (
-                <span>Click selected card again or use Submit button to confirm</span>
+                <span>Review another card or use Submit to confirm</span>
               ) : (
-                <span>Select a card to submit</span>
+                <span>Select a card to inspect and confirm</span>
               )
             ) : (
-              <span>Select a card for your clue</span>
+              <span>Select a card to inspect for your clue</span>
             )}
           </div>
         )}
       </div>
 
-      <div className="cards-container">
-        <div className="cards-scroll">
+      <div className={styles.cardsContainer}>
+        <div className={styles.cardsScroll}>
           {cards.map((cardId) => (
-            <div key={cardId} className="card-wrapper">
+            <div key={cardId} className={styles.cardWrapper}>
               <Card
                 id={cardId}
                 isSelected={selectedCard === cardId}
@@ -85,13 +99,30 @@ export const PlayerHand: React.FC<PlayerHandProps> = ({
       </div>
 
       {canSubmit && selectedCard && (
-        <div className="submit-section">
-          <button onClick={handleSubmit} className="submit-card-btn">
+        <div className={styles.submitSection}>
+          <button onClick={handleSubmit} className={styles.submitBtn}>
             Submit Card {selectedCard}
           </button>
+        </div>
+      )}
+
+      {isModalOpen && modalCardId && (
+        <div className={styles.modalBackdrop} onClick={handleModalCancel}>
+          <div className={styles.modal} onClick={(e: React.MouseEvent) => e.stopPropagation()}>
+            <div className={styles.modalImage}>
+              <img src={`/cards/${modalCardId}.jpg`} alt={`Card ${modalCardId}`} />
+            </div>
+            <div className={styles.modalActions}>
+              <button className={styles.modalCancel} onClick={handleModalCancel}>
+                Cancel
+              </button>
+              <button className={styles.modalConfirm} onClick={handleModalConfirm}>
+                {canSubmit ? 'Confirm & Submit' : 'Confirm'}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
   );
 };
-

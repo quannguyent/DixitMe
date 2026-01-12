@@ -2,6 +2,15 @@
 
 A full-stack implementation of Dixit with real-time multiplayer, bots, chat, and card/tag management. Go backend + React frontend.
 
+## Prerequisites
+- Go 1.23+ (toolchain 1.24.x recommended)
+- Node.js 18+ and npm 9+
+- Docker & Docker Compose (optional, for local Postgres/Redis)
+- Optional: Swagger generator
+  ```bash
+  go install github.com/swaggo/swag/cmd/swag@latest
+  ```
+
 ## Feature Highlights
 - Real-time gameplay over WebSocket: lobby, storytelling, submissions, voting, scoring; win at 30 points or empty deck.
 - Authentication: email/password, Google SSO, guest sessions; JWT cookies/headers; refresh/logout/status.
@@ -10,6 +19,21 @@ A full-stack implementation of Dixit with real-time multiplayer, bots, chat, and
 - Chat: phase-aware chat (lobby/voting) with history, stats, system messages, and moderation visibility flag.
 - Admin/ops: seed tags/cards, DB stats, cleanup old games.
 - Docs: Swagger/OpenAPI for REST; typed WebSocket message types documented below.
+
+## Configuration
+Copy the example env and adjust as needed:
+
+```bash
+cp config.env.example .env
+```
+
+Key settings:
+- `DATABASE_URL` (e.g., `postgres://dixitme:dixitme_password@localhost/dixitme?sslmode=disable`)
+- `REDIS_URL` (e.g., `redis://localhost:6379`)
+- `PORT` (default 8080), `GIN_MODE` (debug|release)
+- `JWT_SECRET` (set a strong value in prod)
+- `ENABLE_SSO` (true|false) and Google OAuth creds if using SSO
+- `MINIO_*` (optional; dev can rely on filesystem fallback)
 
 ## Quick Start
 Backend
@@ -28,8 +52,36 @@ cd web
 npm install
 npm start
 ```
+- CRA dev server proxies API/WS to `http://localhost:8080` (see `web/package.json`).
 
-Seeder CLI
+## Start Postgres & Redis (Dev)
+Bring up backing services with Docker (optional, recommended for local dev):
+
+```bash
+docker compose -f docker-compose.dev.yml up -d
+# Stop:
+docker compose -f docker-compose.dev.yml down
+``` 
+
+## Build frontend and serve via Go server
+`internal/app/server.go` serves `./web/build` at `/` and `/static`.
+
+```bash
+cd web && npm run build && cd ..
+# Then start the backend (serves ./web/build at /)
+go run cmd/server/main.go
+```
+
+## Run everything with Docker (optional)
+Use the provided `docker-compose.yml` to run the app + Postgres + Redis together.
+
+```bash
+docker compose up -d --build
+# App: http://localhost:8080
+# Swagger: http://localhost:8080/swagger/index.html
+```
+
+## Seeder CLI
 ```bash
 go run cmd/seed/main.go          # Seed everything
 go run cmd/seed/main.go -tags    # Tags only
@@ -37,7 +89,14 @@ go run cmd/seed/main.go -cards   # Cards only (requires tags)
 go run cmd/seed/main.go -force   # Force reseed
 ```
 
-Tests: `go test ./...`
+## Testing
+```bash
+# Backend
+go test ./...
+
+# Frontend (jest via CRA)
+cd web && npm test
+```
 
 ## Project Structure
 ```
@@ -101,6 +160,7 @@ Server → Client (message types)
 - Infra wiring (DB/Redis/MinIO) in `internal/data/store.go`.
 - Seeder: `internal/data/seeder` seeds tags/cards; assets under `assets/cards/`.
 - MinIO/S3 config via `.env` (`MINIO_ENDPOINT`, `MINIO_ACCESS_KEY`, etc.).
+- Note: MinIO/S3 is optional in development. If MinIO isn’t available, the seeder falls back to local paths, and the server serves card images from `./assets/cards` at `/cards`.
 
 ## Troubleshooting
 - WebSocket fails: confirm backend is running on the expected port, check browser console for CORS issues, and verify you’re hitting `/ws`.

@@ -1,0 +1,127 @@
+`
+
+/* VotingPhase.module.css */
+.container {
+    grid-column: 1 / 2;
+    background: var(--glass-panel);
+    border: 1px solid var(--accent-pink-glow);
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+    margin-top: 1rem;
+    animation: slideUp 0.5s ease-out;
+}
+
+@keyframes slideUp {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+.header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.header h3 {
+    font-size: 1.5rem;
+    color: var(--accent-pink);
+    margin: 0 0 0.5rem 0;
+    text-shadow: 0 0 10px rgba(244, 114, 182, 0.4);
+}
+
+.instructions {
+    color: var(--ink-muted);
+    font-size: 1rem;
+}
+
+.revealedCards {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 2rem;
+}
+
+.cardsGrid {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 2rem;
+}
+
+.cardWrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+/* Card overrides for revealed context */
+.revealedCard {
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.revealedCard:hover {
+    transform: scale(1.05) rotate(1deg);
+    z-index: 10;
+}
+
+.cardNumber {
+    font-family: monospace;
+    background: rgba(0, 0, 0, 0.3);
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-weight: 700;
+    color: var(--ink-muted);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.voteCount {
+    background: var(--accent-pink);
+    color: white;
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    box-shadow: 0 2px 8px var(--accent-pink-glow);
+    animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes popIn {
+    from {
+        transform: scale(0);
+    }
+
+    to {
+        transform: scale(1);
+    }
+}
+
+.voteSection {
+    display: flex;
+    justify-content: center;
+    padding-top: 1rem;
+    border-top: 1px solid var(--glass-border);
+}
+
+.voteBtn {
+    background: linear-gradient(135deg, var(--accent-pink) 0%, #be185d 100%);
+    color: white;
+    border: none;
+    padding: 1rem 3rem;
+    border-radius: 999px;
+    font-weight: 800;
+    font-size: 1.2rem;
+    cursor: pointer;
+    box-shadow: 0 4px 15px rgba(244, 114, 182, 0.4);
+    transition: all 0.2s ease;
+}
+
+.voteBtn:hover {
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 8px 25px rgba(244, 114, 182, 0.6);
+}

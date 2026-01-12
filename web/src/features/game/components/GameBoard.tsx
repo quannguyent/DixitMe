@@ -2,6 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useGameStore } from '../stores/gameStore';
 import { PlayerHand } from './PlayerHand';
 import { VotingPhase } from './VotingPhase';
+import { MainLayout } from '../../../layouts/MainLayout';
+import styles from './GameBoard.module.css';
 
 export const GameBoard: React.FC = () => {
   const {
@@ -41,7 +43,7 @@ export const GameBoard: React.FC = () => {
 
   const handleSubmitClue = () => {
     if (!gameState || !selectedCard || !clueText.trim()) return;
-    
+
     submitClue(gameState.room_code, clueText.trim(), selectedCard);
     setShowClueForm(false);
     setSelectedCard(null);
@@ -109,12 +111,16 @@ export const GameBoard: React.FC = () => {
 
   if (!gameState || !currentPlayer) {
     return (
-      <div className="game-board loading">
-        <div className="loading-content">
-          <div className="spinner"></div>
-          <p>Loading game...</p>
+      <MainLayout>
+        <div className={styles.container}>
+          <div className={styles.loading}>
+            <div className={styles.loadingContent}>
+              <div className={styles.spinner}></div>
+              <p>Loading game...</p>
+            </div>
+          </div>
         </div>
-      </div>
+      </MainLayout>
     );
   }
 
@@ -124,163 +130,166 @@ export const GameBoard: React.FC = () => {
   const isStoryteller = !!gameState.current_round && currentPlayer.id === gameState.current_round.storyteller_id;
 
   return (
-    <div className="game-board">
-      <div className="game-header">
-        <div className="game-info">
-          <div className="room-pill">Room {gameState.room_code}</div>
-          <h1>Dixit Table</h1>
-          <div className="connection-status">
-            <span className={`status-indicator ${isConnected ? 'connected' : 'disconnected'}`}>
-              {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
-            </span>
-          </div>
-        </div>
-        
-        <div className="round-info">
-          <div className="round-number">Round {gameState.round_number} of {gameState.max_rounds}</div>
-          {gameState.current_round && (
-            <div className="storyteller-info">
-              Storyteller: <strong>{getStorytellerName()}</strong>
-            </div>
-          )}
-          <div className="role-badge">{isStoryteller ? 'You are the storyteller' : 'You are a player'}</div>
-        </div>
-
-        <button onClick={handleLeaveGame} className="leave-btn">
-          Leave Game
-        </button>
-      </div>
-
-      <div className="phase-indicator">
-        <h2>{getGamePhase()}</h2>
-        <div className="phase-meta">
-          <span className="phase-pill">{phaseTag}</span>
-        </div>
-        {gameState.current_round?.clue && (
-          <div className="clue-display">
-            <strong>Clue:</strong> "{gameState.current_round.clue}"
-          </div>
-        )}
-      </div>
-
-      <div className="players-section">
-        <div className="players-header">
-          <h3>Players</h3>
-          <div className="players-count">{onlineCount} online</div>
-        </div>
-        <div className="players-grid">
-          {players.map((player) => (
-            <div
-              key={player.id}
-              className={`player-card ${player.id === currentPlayer.id ? 'current-player' : ''} ${
-                player.id === gameState.current_round?.storyteller_id ? 'storyteller' : ''
-              }`}
-            >
-              <div className="player-name">{player.name}</div>
-              <div className="player-score">Score: {player.score}</div>
-              <div className={`player-status ${player.is_connected ? 'online' : 'offline'}`}>
-                {player.is_connected ? '🟢' : '🔴'}
+    <MainLayout>
+      <div className={styles.container}>
+        <div className={styles.gameBoard}>
+          <div className={styles.gameHeader}>
+            <div className={styles.gameInfo}>
+              <div className={styles.roomPill}>Room {gameState.room_code}</div>
+              <h1>Table</h1>
+              <div className={styles.connectionStatus}>
+                <span className={`${styles.statusIndicator} ${isConnected ? styles.connected : styles.disconnected}`}>
+                  {isConnected ? '🟢 Connected' : '🔴 Disconnected'}
+                </span>
               </div>
-              {gameState.current_round?.submissions[player.id] && (
-                <div className="submission-indicator">📤 Submitted</div>
-              )}
-              {gameState.current_round?.votes[player.id] && (
-                <div className="vote-indicator">🗳️ Voted</div>
-              )}
             </div>
-          ))}
-        </div>
-      </div>
 
-      {gameState.phase === 'VOTING' && gameState.current_round?.revealed_cards && (
-        <VotingPhase
-          revealedCards={gameState.current_round.revealed_cards}
-          isStoryteller={currentPlayer.id === gameState.current_round.storyteller_id}
-          hasVoted={!!gameState.current_round.votes[currentPlayer.id]}
-          onVote={(cardId) => {
-            if (gameState) {
-              useGameStore.getState().submitVote(gameState.room_code, cardId);
-            }
-          }}
-        />
-      )}
+            <div className={styles.roundInfo}>
+              <div className={styles.roundNumber}>Round {gameState.round_number} of {gameState.max_rounds}</div>
+              {gameState.current_round && (
+                <div className={styles.storytellerInfo}>
+                  Storyteller: <strong>{getStorytellerName()}</strong>
+                </div>
+              )}
+              <div className={styles.roleBadge}>{isStoryteller ? 'You are the storyteller' : 'You are a player'}</div>
+            </div>
 
-      {showClueForm && (
-        <div className="clue-form-section">
-          <div className="clue-form">
-            <h3>Give your clue</h3>
-            <input
-              type="text"
-              value={clueText}
-              onChange={(e) => setClueText(e.target.value)}
-              placeholder="Enter your clue..."
-              maxLength={100}
-              onKeyPress={(e) => {
-                if (e.key === 'Enter' && selectedCard && clueText.trim()) {
-                  handleSubmitClue();
+            <button onClick={handleLeaveGame} className={styles.leaveBtn}>
+              Leave Game
+            </button>
+          </div>
+
+          <div className={styles.phaseIndicator}>
+            <h2>{getGamePhase()}</h2>
+            <div className={styles.phaseMeta}>
+              <span className={styles.phasePill}>{phaseTag}</span>
+            </div>
+            {gameState.current_round?.clue && (
+              <div className={styles.clueDisplay}>
+                <strong>Clue:</strong> "{gameState.current_round.clue}"
+              </div>
+            )}
+          </div>
+
+          <div className={styles.playersSection}>
+            <div className={styles.playersHeader}>
+              <h3>Players</h3>
+              <div className={styles.playersCount}>{onlineCount} online</div>
+            </div>
+            <div className={styles.playersGrid}>
+              {players.map((player) => (
+                <div
+                  key={player.id}
+                  className={`${styles.playerCard} ${player.id === currentPlayer.id ? styles.currentPlayer : ''} ${player.id === gameState.current_round?.storyteller_id ? styles.storyteller : ''
+                    }`}
+                >
+                  <div className={styles.playerName}>{player.name}</div>
+                  <div className={styles.playerScore}>Score: {player.score}</div>
+                  <div className={styles.playerStatus}>
+                    {player.is_connected ? '🟢' : '🔴'}
+                  </div>
+                  {gameState.current_round?.submissions[player.id] && (
+                    <div className={styles.submissionIndicator}>📤 Submitted</div>
+                  )}
+                  {gameState.current_round?.votes[player.id] && (
+                    <div className={styles.voteIndicator}>🗳️ Voted</div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {gameState.phase === 'VOTING' && gameState.current_round?.revealed_cards && (
+            <VotingPhase
+              revealedCards={gameState.current_round.revealed_cards}
+              isStoryteller={currentPlayer.id === gameState.current_round.storyteller_id}
+              hasVoted={!!gameState.current_round.votes[currentPlayer.id]}
+              onVote={(cardId) => {
+                if (gameState) {
+                  useGameStore.getState().submitVote(gameState.room_code, cardId);
                 }
               }}
             />
-            <div className="clue-actions">
-              <span className="selected-indicator">
-                {selectedCard ? `Card ${selectedCard} selected` : 'Select a card first'}
-              </span>
-              <button
-                onClick={handleSubmitClue}
-                disabled={!selectedCard || !clueText.trim()}
-                className="submit-clue-btn"
-              >
-                Submit Clue
+          )}
+
+          {showClueForm && (
+            <div className={styles.clueFormSection}>
+              <div className={styles.clueForm}>
+                <h3>Give your clue</h3>
+                <input
+                  type="text"
+                  value={clueText}
+                  onChange={(e) => setClueText(e.target.value)}
+                  placeholder="Enter your clue..."
+                  maxLength={100}
+                  onKeyPress={(e) => {
+                    if (e.key === 'Enter' && selectedCard && clueText.trim()) {
+                      handleSubmitClue();
+                    }
+                  }}
+                />
+                <div className={styles.clueActions}>
+                  <span className={styles.selectedIndicator}>
+                    {selectedCard ? `Card ${selectedCard} selected` : 'Select a card first'}
+                  </span>
+                  <button
+                    onClick={handleSubmitClue}
+                    disabled={!selectedCard || !clueText.trim()}
+                    className={styles.submitClueBtn}
+                  >
+                    Submit Clue
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className={styles.chatPanel}>
+            <div className={styles.chatHeader}>Chat</div>
+            <div className={styles.chatMessages}>
+              {chatMessages.length === 0 && (
+                <div className={styles.chatEmpty}>No messages yet.</div>
+              )}
+              {chatMessages.map((msg) => (
+                <div
+                  key={msg.id}
+                  className={`${styles.chatMessage} ${msg.player_name === 'System' ? styles.system : ''}`}
+                >
+                  <span className={styles.chatName}>{msg.player_name}:</span>
+                  <span className={styles.chatText}>{msg.message}</span>
+                </div>
+              ))}
+              <div ref={chatEndRef} />
+            </div>
+            <div className={styles.chatInput}>
+              <input
+                type="text"
+                value={chatText}
+                onChange={(e) => setChatText(e.target.value)}
+                placeholder="Type a message..."
+                maxLength={200}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleSendChat();
+                  }
+                }}
+              />
+              <button onClick={handleSendChat} disabled={!chatText.trim()}>
+                Send
               </button>
             </div>
           </div>
-        </div>
-      )}
 
-      <div className="chat-panel">
-        <div className="chat-header">Chat</div>
-        <div className="chat-messages">
-          {chatMessages.length === 0 && (
-            <div className="chat-empty">No messages yet.</div>
-          )}
-          {chatMessages.map((msg) => (
-            <div
-              key={msg.id}
-              className={`chat-message ${msg.player_name === 'System' ? 'system' : ''}`}
-            >
-              <span className="chat-name">{msg.player_name}:</span>
-              <span className="chat-text">{msg.message}</span>
-            </div>
-          ))}
-          <div ref={chatEndRef} />
-        </div>
-        <div className="chat-input">
-          <input
-            type="text"
-            value={chatText}
-            onChange={(e) => setChatText(e.target.value)}
-            placeholder="Type a message..."
-            maxLength={200}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                handleSendChat();
-              }
-            }}
+          <PlayerHand
+            cards={currentPlayer.hand}
+            selectedCard={selectedCard}
+            onCardSelect={setSelectedCard}
+            canSelect={showClueForm || canSubmitCard()}
+            canSubmit={canSubmitCard()}
+            onSubmit={handleSubmitCard}
           />
-          <button onClick={handleSendChat} disabled={!chatText.trim()}>
-            Send
-          </button>
         </div>
       </div>
-
-      <PlayerHand
-        cards={currentPlayer.hand}
-        selectedCard={selectedCard}
-        onCardSelect={setSelectedCard}
-        canSelect={showClueForm || canSubmitCard()}
-        canSubmit={canSubmitCard()}
-        onSubmit={handleSubmitCard}
-      />
-    </div>
+    </MainLayout>
   );
 };

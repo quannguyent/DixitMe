@@ -1,0 +1,168 @@
+.container {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    position: relative;
+    overflow: hidden;
+}
+
+.starsBackground {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(ellipse at bottom, var(--bg-stars) 0%, var(--bg-deep) 100%);
+    z-index: -1;
+}
+
+/* Procedural stars/nebula effect using multiple backgrounds */
+.starsBackground::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-image:
+        radial-gradient(2px 2px at 20px 30px, #ffffff, rgba(0, 0, 0, 0)),
+        radial-gradient(2px 2px at 40px 70px, #ffffff, rgba(0, 0, 0, 0)),
+        radial-gradient(2px 2px at 50px 160px, #ffffff, rgba(0, 0, 0, 0)),
+        radial-gradient(2px 2px at 90px 40px, #ffffff, rgba(0, 0, 0, 0)),
+        radial-gradient(2px 2px at 130px 80px, #ffffff, rgba(0, 0, 0, 0)),
+        radial-gradient(2px 2px at 160px 120px, #ffffff, rgba(0, 0, 0, 0));
+    background-size: 200px 200px;
+    animation: twinkle 10s infinite linear;
+    opacity: 0.5;
+}
+
+.clouds {
+    position: absolute;
+    inset: 0;
+    background: url("https://raw.githubusercontent.com/nasa/apod-api-docs/master/images/apod.jpg") center/cover no-repeat;
+    /* Placeholder for texture, or use CSS gradients */
+    background:
+        radial-gradient(circle at 50% 50%, rgba(36, 36, 62, 0), rgba(15, 12, 41, 0.8)),
+        radial-gradient(circle at 10% 20%, rgba(244, 114, 182, 0.08), transparent 30%),
+        radial-gradient(circle at 90% 80%, rgba(34, 211, 238, 0.08), transparent 30%);
+    filter: blur(20px);
+}
+
+@keyframes twinkle {
+    from {
+        background-position: 0 0;
+    }
+
+    to {
+        background-position: 100px 100px;
+    }
+}
+
+.header {
+    height: 70px;
+    padding: 0 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid var(--glass-border);
+    background: rgba(15, 12, 41, 0.6);
+    backdrop-filter: blur(16px);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+}
+
+.logo {
+    font-size: 1.8rem;
+    font-weight: 800;
+    background: linear-gradient(to right, var(--accent-gold), var(--accent-pink));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    letter-spacing: -0.03em;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.logoEmoji {
+    font-size: 1.5rem;
+    filter: drop-shadow(0 0 10px rgba(251, 191, 36, 0.5));
+}
+
+.main {
+    flex: 1;
+    width: 100%;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 2rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.footer {
+    padding: 1.5rem;
+    text-align: center;
+    color: var(--ink-muted);
+    font-size: 0.85rem;
+    border-top: 1px solid var(--glass-border);
+    background: rgba(15, 12, 41, 0.8);
+}
+
+/* User Profile in Header */
+.userProfile {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.userInfo {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+}
+
+.userName {
+    font-weight: 700;
+    font-size: 0.95rem;
+    color: var(--ink);
+}
+
+.userRole {
+    font-size: 0.75rem;
+    color: var(--accent-cyan);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-weight: 700;
+}
+
+.avatar {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent-pink), var(--accent-gold));
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    color: white;
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+}
+
+.authButtons {
+    display: flex;
+    gap: 1rem;
+}
+
+@media (max-width: 768px) {
+    .header {
+        padding: 0 1rem;
+    }
+
+    .main {
+        padding: 1rem;
+    }
+
+    .userInfo {
+        display: none;
+    }
+}

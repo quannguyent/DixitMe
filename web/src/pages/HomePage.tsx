@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useGameStore } from '../features/game/stores/gameStore';
 import { Lobby } from '../features/lobby/components/Lobby';
+import { MainLayout } from '../layouts/MainLayout';
 import { GameBoard } from '../features/game';
 import { useAuthStore } from '../features/auth/stores/authStore';
 import styles from './HomePage.module.css';
@@ -41,7 +42,6 @@ export const HomePage: React.FC = () => {
     login,
     register,
     loginAsGuest,
-    logout,
     clearError,
   } = useAuthStore();
 
@@ -99,7 +99,7 @@ export const HomePage: React.FC = () => {
     if (user && !gameForm.playerName) {
       setGameForm(prev => ({ ...prev, playerName: user.name }));
     }
-  }, [user]);
+  }, [user, gameForm.playerName]);
 
   // Try to restore guest name from localStorage if no user
   useEffect(() => {
@@ -109,7 +109,7 @@ export const HomePage: React.FC = () => {
         setGameForm(prev => ({ ...prev, playerName: savedGuestName }));
       }
     }
-  }, [user]);
+  }, [user, gameForm.playerName]);
 
   const handleGameFormChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setGameForm({
@@ -211,11 +211,7 @@ export const HomePage: React.FC = () => {
     }
   };
 
-  const handleLogout = async () => {
-    if (window.confirm('Are you sure you want to logout?')) {
-      await logout();
-    }
-  };
+
 
   // Clear errors after 5 seconds
   useEffect(() => {
@@ -241,43 +237,18 @@ export const HomePage: React.FC = () => {
   }
 
   return (
-    <div className={styles.container}>
-      {/* Header with user info or sign-in button */}
-      <div className={styles.header}>
-        <div className={styles.logo}>
-          <h1>DixitMe</h1>
-          <p>Online Dixit Card Game</p>
-        </div>
-        
-        <div className={styles.userSection}>
-          {user ? (
-            <div className={styles.userInfo}>
-              <div className={styles.userDetails}>
-                <span className={styles.userName}>{user.name}</span>
-                <span className={styles.userType}>
-                  {user.auth_type === 'guest' ? '👤 Guest' : '🔐 Member'}
-                </span>
-              </div>
-              <div className={styles.userActions}>
-                <button className={styles.historyBtn} title="View game history">
-                  📊 History
-                </button>
-                <button onClick={handleLogout} className={styles.logoutBtn}>
-                  ↗️ Logout
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button 
-              onClick={() => setShowAuth(true)}
-              className={styles.signInBtn}
-            >
-              🔑 Sign In
-            </button>
-          )}
-        </div>
-      </div>
-
+    <MainLayout
+      headerActions={
+        !user && (
+          <button
+            onClick={() => setShowAuth(true)}
+            className={styles.signInBtn}
+          >
+            🔑 Sign In
+          </button>
+        )
+      }
+    >
       {/* Main game section */}
       <div className={styles.gameSection}>
         <div className={styles.connectionStatus}>
@@ -525,6 +496,6 @@ export const HomePage: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </MainLayout>
   );
 };

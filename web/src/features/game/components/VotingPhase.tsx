@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Card } from './Card';
 import { RevealedCard } from '../types';
+import styles from './VotingPhase.module.css';
 
 interface VotingPhaseProps {
   revealedCards: RevealedCard[];
@@ -19,7 +20,7 @@ export const VotingPhase: React.FC<VotingPhaseProps> = ({
 
   const handleCardClick = (cardId: number) => {
     if (isStoryteller || hasVoted) return;
-    
+
     if (selectedCard === cardId) {
       // Double-click to vote
       onVote(cardId);
@@ -36,38 +37,38 @@ export const VotingPhase: React.FC<VotingPhaseProps> = ({
   };
 
   return (
-    <div className="voting-phase">
-      <div className="voting-header">
+    <div className={styles.container}>
+      <div className={styles.header}>
         <h3>
-          {isStoryteller 
-            ? 'Waiting for players to vote...' 
-            : hasVoted 
-              ? 'You have voted! Waiting for other players...' 
+          {isStoryteller
+            ? 'Waiting for players to vote...'
+            : hasVoted
+              ? 'You have voted! Waiting for other players...'
               : 'Which card belongs to the storyteller?'
           }
         </h3>
         {!isStoryteller && !hasVoted && (
-          <p className="voting-instructions">
+          <p className={styles.instructions}>
             Click a card to select it, then click again or use the Vote button to confirm
           </p>
         )}
       </div>
 
-      <div className="revealed-cards">
-        <div className="cards-grid">
+      <div className={styles.revealedCards}>
+        <div className={styles.cardsGrid}>
           {revealedCards.map((revealedCard, index) => (
-            <div key={`${revealedCard.card_id}-${index}`} className="revealed-card-wrapper">
+            <div key={`${revealedCard.card_id}-${index}`} className={styles.cardWrapper}>
               <Card
                 id={revealedCard.card_id}
                 isSelected={selectedCard === revealedCard.card_id}
                 isClickable={!isStoryteller && !hasVoted}
                 onClick={handleCardClick}
                 size="large"
-                className="revealed-card"
+                className={styles.revealedCard}
               />
-              <div className="card-number">Card {String.fromCharCode(65 + index)}</div>
+              <div className={styles.cardNumber}>Card {String.fromCharCode(65 + index)}</div>
               {revealedCard.vote_count > 0 && (
-                <div className="vote-count">
+                <div className={styles.voteCount}>
                   {revealedCard.vote_count} vote{revealedCard.vote_count !== 1 ? 's' : ''}
                 </div>
               )}
@@ -77,8 +78,8 @@ export const VotingPhase: React.FC<VotingPhaseProps> = ({
       </div>
 
       {!isStoryteller && !hasVoted && selectedCard && (
-        <div className="vote-section">
-          <button onClick={handleVote} className="vote-btn">
+        <div className={styles.voteSection}>
+          <button onClick={handleVote} className={styles.voteBtn}>
             Vote for Card {String.fromCharCode(65 + revealedCards.findIndex(c => c.card_id === selectedCard))}
           </button>
         </div>
@@ -86,4 +87,3 @@ export const VotingPhase: React.FC<VotingPhaseProps> = ({
     </div>
   );
 };
-

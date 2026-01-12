@@ -1,10 +1,12 @@
+/* Card.module.css */
 .card {
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   overflow: hidden;
-  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.45);
-  transition: all 0.3s ease;
-  background: #1a1714;
+  box-shadow: var(--shadow-md);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  background: var(--bg-nebula);
   position: relative;
+  border: 1px solid var(--glass-border);
 }
 
 .cardSmall {
@@ -27,13 +29,16 @@
 }
 
 .card.clickable:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 18px 30px rgba(0, 0, 0, 0.55);
+  transform: translateY(-8px) scale(1.02);
+  box-shadow: 0 16px 32px rgba(0, 0, 0, 0.5);
+  border-color: rgba(255, 255, 255, 0.3);
+  z-index: 5;
 }
 
 .card.selected {
-  border: 3px solid var(--accent);
-  box-shadow: 0 0 0 2px rgba(201, 166, 72, 0.3);
+  border: 3px solid var(--accent-gold);
+  box-shadow: 0 0 20px var(--accent-gold-glow);
+  transform: translateY(-8px);
 }
 
 .cardInner {
@@ -51,7 +56,7 @@
 .cardBack {
   width: 100%;
   height: 100%;
-  background: linear-gradient(135deg, #bfa75d 0%, #222222 100%);
+  background: linear-gradient(135deg, #1e1b2e 0%, #0f0c29 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -69,10 +74,11 @@
 .patternCircle {
   width: 60px;
   height: 60px;
-  border: 3px solid rgba(255, 255, 255, 0.3);
+  border: 3px solid var(--accent-gold);
   border-radius: 50%;
   margin: 0 auto 8px;
   position: relative;
+  box-shadow: 0 0 15px var(--accent-gold-glow);
 }
 
 .patternCircle::before {
@@ -83,15 +89,17 @@
   transform: translate(-50%, -50%);
   width: 30px;
   height: 30px;
-  border: 2px solid rgba(255, 255, 255, 0.5);
+  border: 2px solid var(--accent-pink);
   border-radius: 50%;
 }
 
 .patternText {
-  font-weight: bold;
+  font-weight: 800;
   font-size: 14px;
-  letter-spacing: 1px;
+  letter-spacing: 2px;
   text-transform: uppercase;
+  color: var(--accent-gold);
+  text-shadow: 0 0 10px var(--accent-gold-glow);
 }
 
 .cardBack::before {
@@ -101,13 +109,11 @@
   left: -50%;
   width: 200%;
   height: 200%;
-  background: repeating-linear-gradient(
-    45deg,
-    transparent,
-    transparent 10px,
-    rgba(255, 255, 255, 0.05) 10px,
-    rgba(255, 255, 255, 0.05) 20px
-  );
+  background: repeating-linear-gradient(45deg,
+      transparent,
+      transparent 10px,
+      rgba(255, 255, 255, 0.03) 10px,
+      rgba(255, 255, 255, 0.03) 20px);
   animation: patternMove 20s linear infinite;
 }
 
@@ -115,6 +121,7 @@
   0% {
     transform: translateX(-50px) translateY(-50px);
   }
+
   100% {
     transform: translateX(0px) translateY(0px);
   }
@@ -134,19 +141,5 @@
   .cardLarge {
     width: 140px;
     height: 210px;
-  }
-
-  .patternText {
-    font-size: 12px;
-  }
-
-  .patternCircle {
-    width: 50px;
-    height: 50px;
-  }
-
-  .patternCircle::before {
-    width: 25px;
-    height: 25px;
   }
 }

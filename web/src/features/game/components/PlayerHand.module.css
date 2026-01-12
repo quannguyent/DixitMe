@@ -1,0 +1,195 @@
+/* PlayerHand.module.css */
+.container {
+    grid-column: 1 / -1;
+    background: rgba(0, 0, 0, 0.4);
+    border-top: 1px solid var(--glass-border);
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+    backdrop-filter: blur(8px);
+    margin-top: 1rem;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.header h3 {
+    margin: 0;
+    font-size: 1.25rem;
+    color: white;
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5);
+}
+
+.instructions {
+    background: var(--glass-panel);
+    padding: 0.5rem 1rem;
+    border-radius: 999px;
+    font-size: 0.9rem;
+    color: var(--accent-gold);
+    border: 1px solid rgba(251, 191, 36, 0.2);
+}
+
+.cardsContainer {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 1rem;
+    scrollbar-width: thin;
+    scrollbar-color: var(--glass-border) transparent;
+}
+
+.cardsContainer::-webkit-scrollbar {
+    height: 8px;
+}
+
+.cardsContainer::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 4px;
+}
+
+.cardsContainer::-webkit-scrollbar-thumb {
+    background: var(--glass-border);
+    border-radius: 4px;
+}
+
+.cardsScroll {
+    display: flex;
+    gap: 1.5rem;
+    padding: 0.5rem;
+    min-width: min-content;
+}
+
+.cardWrapper {
+    position: relative;
+    transition: transform 0.2s ease;
+}
+
+.cardWrapper:hover {
+    transform: translateY(-8px);
+    z-index: 10;
+}
+
+.submitSection {
+    margin-top: 1.5rem;
+    display: flex;
+    justify-content: center;
+}
+
+.submitBtn {
+    background: linear-gradient(135deg, var(--accent-gold) 0%, #d97706 100%);
+    color: #3b0d0c;
+    border: none;
+    padding: 1rem 3rem;
+    border-radius: 999px;
+    font-weight: 800;
+    font-size: 1.1rem;
+    cursor: pointer;
+    box-shadow: 0 4px 15px var(--accent-gold-glow);
+    transition: all 0.2s ease;
+}
+
+.submitBtn:hover {
+    transform: translateY(-2px) scale(1.05);
+    box-shadow: 0 8px 25px var(--accent-gold-glow);
+}
+
+.emptyHand {
+    text-align: center;
+    padding: 3rem;
+    color: var(--ink-muted);
+    font-style: italic;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-lg);
+}
+
+/* Modal styles - consider moving to global or shared if reused */
+.modalBackdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    backdrop-filter: blur(8px);
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    animation: fadeIn 0.2s ease-out;
+}
+
+.modal {
+    max-width: 90vh;
+    /* Using vh to fit image aspect ratio usually */
+    width: 100%;
+    background: transparent;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    align-items: center;
+    transform-origin: center;
+    animation: zoomIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes zoomIn {
+    from {
+        transform: scale(0.9);
+        opacity: 0;
+    }
+
+    to {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+.modalImage {
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    border: 1px solid var(--glass-border);
+}
+
+.modalImage img {
+    display: block;
+    max-height: 70vh;
+    max-width: 100%;
+    object-fit: contain;
+}
+
+.modalActions {
+    display: flex;
+    gap: 1rem;
+}
+
+.modalCancel {
+    background: rgba(255, 255, 255, 0.1);
+    color: white;
+    border: 1px solid var(--glass-border);
+    padding: 1rem 2rem;
+    border-radius: 999px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.modalCancel:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.modalConfirm {
+    background: var(--accent-gold);
+    color: #3b0d0c;
+    border: none;
+    padding: 1rem 3rem;
+    border-radius: 999px;
+    font-weight: 800;
+    cursor: pointer;
+    box-shadow: 0 0 20px var(--accent-gold-glow);
+    transition: all 0.2s ease;
+}
+
+.modalConfirm:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 30px var(--accent-gold-glow);
+}

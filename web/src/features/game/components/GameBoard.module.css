@@ -1,0 +1,508 @@
+/* GameBoard.module.css */
+.container {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    width: 100%;
+    padding: 1rem;
+    animation: fadeIn 0.8s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Loading State */
+.loading {
+    min-height: 70vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.loadingContent {
+    text-align: center;
+    padding: 2rem;
+    background: var(--glass-panel);
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--glass-border);
+    backdrop-filter: blur(12px);
+}
+
+.spinner {
+    width: 40px;
+    height: 40px;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    border-top-color: var(--accent-gold);
+    border-radius: 50%;
+    margin: 0 auto 1rem;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Main Grid Layout */
+.gameBoard {
+    max-width: 1300px;
+    margin: 0 auto;
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 24px;
+}
+
+/* Header Section */
+.gameHeader {
+    grid-column: 1 / -1;
+    background: var(--glass-panel);
+    backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem 2rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1.5rem;
+    box-shadow: var(--shadow-md);
+}
+
+.gameInfo {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.gameInfo h1 {
+    font-size: 2rem;
+    background: linear-gradient(135deg, #fff 0%, #cbd5e1 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 0;
+}
+
+.roomPill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-family: monospace;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 0.25rem 0.75rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    color: var(--accent-cyan);
+    border: 1px solid rgba(34, 211, 238, 0.2);
+}
+
+.connectionStatus {
+    font-size: 0.9rem;
+}
+
+.statusIndicator {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-weight: 600;
+}
+
+.statusIndicator.connected {
+    color: var(--success);
+}
+
+.statusIndicator.disconnected {
+    color: var(--error);
+}
+
+.roundInfo {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 0.25rem;
+}
+
+.roundNumber {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent-gold);
+}
+
+.storytellerInfo {
+    font-size: 0.95rem;
+    color: var(--ink-muted);
+}
+
+.roleBadge {
+    background: linear-gradient(135deg, var(--accent-pink) 0%, #db2777 100%);
+    color: white;
+    padding: 0.35rem 1rem;
+    border-radius: 999px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    box-shadow: 0 4px 10px rgba(244, 114, 182, 0.3);
+}
+
+.leaveBtn {
+    margin-left: auto;
+    background: rgba(248, 113, 113, 0.1);
+    color: #fca5a5;
+    border: 1px solid rgba(248, 113, 113, 0.3);
+    padding: 0.6rem 1.25rem;
+    border-radius: 999px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.leaveBtn:hover {
+    background: rgba(248, 113, 113, 0.2);
+    transform: translateY(-1px);
+}
+
+/* Phase Indicator */
+.phaseIndicator {
+    grid-column: 1 / 2;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+    display: grid;
+    gap: 1rem;
+    position: relative;
+    overflow: hidden;
+}
+
+.phaseIndicator::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 4px;
+    height: 100%;
+    background: var(--accent-gold);
+}
+
+.phaseIndicator h2 {
+    font-size: 1.5rem;
+    color: white;
+    margin: 0;
+}
+
+.phaseMeta {
+    display: flex;
+    gap: 1rem;
+}
+
+.phasePill {
+    background: var(--accent-gold-glow);
+    color: #3b0d0c;
+    font-weight: 700;
+    padding: 0.35rem 1rem;
+    border-radius: 999px;
+    font-size: 0.85rem;
+}
+
+.clueDisplay {
+    background: rgba(0, 0, 0, 0.2);
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    border-left: 3px solid var(--accent-pink);
+    font-style: italic;
+    font-size: 1.1rem;
+}
+
+/* Players Section */
+.playersSection {
+    grid-column: 1 / 2;
+    background: var(--glass-panel);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    padding: 1.5rem;
+}
+
+.playersHeader {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.playersHeader h3 {
+    font-size: 1.1rem;
+    margin: 0;
+}
+
+.playersGrid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 1rem;
+}
+
+.playerCard {
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--glass-border);
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    position: relative;
+    transition: all 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.playerCard.currentPlayer {
+    border-color: var(--accent-gold);
+    box-shadow: 0 0 0 1px var(--accent-gold-glow);
+    background: rgba(251, 191, 36, 0.05);
+}
+
+.playerCard.storyteller::after {
+    content: 'Storyteller';
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    background: var(--accent-pink);
+    color: white;
+    font-size: 0.65rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    padding: 2px 8px;
+    border-radius: 999px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+}
+
+.playerName {
+    font-weight: 700;
+    font-size: 1rem;
+}
+
+.playerScore {
+    font-size: 0.9rem;
+    color: var(--ink-muted);
+}
+
+.playerStatus {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 0.8rem;
+}
+
+.submissionIndicator {
+    color: var(--accent-cyan);
+    font-size: 0.8rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.voteIndicator {
+    color: var(--accent-pink);
+    font-size: 0.8rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Clue Form */
+.clueFormSection {
+    grid-column: 1 / 2;
+    background: var(--glass-panel);
+    border: 1px solid var(--glass-border);
+    padding: 1.5rem;
+    border-radius: var(--radius-lg);
+    box-shadow: 0 0 20px rgba(251, 191, 36, 0.1);
+}
+
+.clueForm {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.clueForm h3 {
+    margin: 0;
+    color: var(--accent-gold);
+}
+
+.clueForm input {
+    padding: 1rem;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--glass-border);
+    background: rgba(0, 0, 0, 0.3);
+    color: white;
+    font-size: 1.1rem;
+}
+
+.clueForm input:focus {
+    outline: none;
+    border-color: var(--accent-gold);
+    background: rgba(0, 0, 0, 0.4);
+}
+
+.clueActions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.selectedIndicator {
+    color: var(--ink-muted);
+    font-size: 0.9rem;
+}
+
+.submitClueBtn {
+    background: var(--accent-gold);
+    color: #3b0d0c;
+    border: none;
+    padding: 0.75rem 2rem;
+    border-radius: 999px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.submitClueBtn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 15px var(--accent-gold-glow);
+}
+
+.submitClueBtn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Chat Panel */
+.chatPanel {
+    grid-column: 2 / 3;
+    grid-row: 2 / span 4;
+    background: var(--glass-panel-strong);
+    backdrop-filter: blur(16px);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg);
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 500px;
+    max-height: 80vh;
+    position: sticky;
+    top: 100px;
+}
+
+.chatHeader {
+    padding: 1rem 1.25rem;
+    font-weight: 700;
+    border-bottom: 1px solid var(--glass-border);
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.chatMessages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.chatEmpty {
+    text-align: center;
+    color: var(--ink-muted);
+    font-style: italic;
+    font-size: 0.9rem;
+    margin-top: 2rem;
+}
+
+.chatMessage {
+    font-size: 0.95rem;
+    line-height: 1.4;
+    word-wrap: break-word;
+}
+
+.chatMessage.system {
+    background: rgba(251, 191, 36, 0.1);
+    border-left: 3px solid var(--accent-gold);
+    padding: 0.5rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+}
+
+.chatName {
+    font-weight: 700;
+    color: var(--accent-gold);
+    margin-right: 0.5rem;
+}
+
+.chatInput {
+    padding: 1rem;
+    border-top: 1px solid var(--glass-border);
+    display: flex;
+    gap: 0.5rem;
+    background: rgba(0, 0, 0, 0.2);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+.chatInput input {
+    flex: 1;
+    padding: 0.6rem 1rem;
+    border-radius: 999px;
+    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.05);
+    color: var(--ink);
+}
+
+.chatInput input:focus {
+    outline: none;
+    border-color: var(--accent-gold);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.chatInput button {
+    padding: 0.6rem 1.25rem;
+    border-radius: 999px;
+    border: none;
+    background: var(--accent-gold);
+    color: #3b0d0c;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+    .gameBoard {
+        grid-template-columns: 1fr;
+    }
+
+    .chatPanel {
+        grid-column: 1 / -1;
+        grid-row: auto;
+        height: 400px;
+        position: static;
+    }
+
+    .gameHeader {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .leaveBtn {
+        margin-left: 0;
+        width: 100%;
+    }
+}
