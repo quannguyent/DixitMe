@@ -23,6 +23,9 @@
   --accent-pink: #f472b6;
   --accent-pink-glow: rgba(244, 114, 182, 0.5);
   --accent-cyan: #22d3ee;
+  --accent-indigo: #6366f1;
+  --accent-purple: #a855f7;
+  --accent-gold-glow: rgba(251, 191, 36, 0.4);
 
   /* Semantic */
   --success: #34d399;
